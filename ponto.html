@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR" data-theme="light"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 
 
 <title>Ponto das Tarefas</title>
@@ -436,9 +436,14 @@ input[list]::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
 
 
 <style>
-:root {--accent:#177b80;--f-display:"Segoe UI",system-ui,sans-serif;--f-body:"Segoe UI",system-ui,sans-serif;--f-mono:Consolas,monospace}
-.wrap{max-width:none;padding:20px 24px 40px}.top h1{font-size:22px;color:#17353e}.top .who{font-size:12px}
-.timer{border-radius:12px}.timer.running{border-color:#177b80}
+:root{--bg:#eef1f5;--accent:#177b80}
+/* escuro: mesma paleta do painel Nimitz */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0a121a;--surface:#111b25;--surface-2:#152230;--line:#213445;--ink:#e9f1f6;--muted:#a3b4c2;--accent:#22d3ee;--accent-ink:#06222a;--stop:#ff7590;--warn:#f0b355;--warn-bg:#2a1f0f;--ok:#3ee6b4;--ok-bg:#0d241d;--err:#ff7590;--err-bg:#2c1420;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0a121a;--surface:#111b25;--surface-2:#152230;--line:#213445;--ink:#e9f1f6;--muted:#a3b4c2;--accent:#22d3ee;--accent-ink:#06222a;--stop:#ff7590;--warn:#f0b355;--warn-bg:#2a1f0f;--ok:#3ee6b4;--ok-bg:#0d241d;--err:#ff7590;--err-bg:#2c1420;color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+:root {--f-display:"Segoe UI",system-ui,sans-serif;--f-body:"Segoe UI",system-ui,sans-serif;--f-mono:Consolas,monospace}
+.wrap{max-width:none;padding:20px 24px 40px}.top h1{font-size:22px;color:var(--ink)}.top .who{font-size:12px}
+.timer{border-radius:12px}.timer.running{border-color:var(--accent)}
 @media(max-width:650px){.wrap{padding:14px 12px 32px}}
 </style><script type="module" src="./ponto-boot.js"></script>
 </body></html>
