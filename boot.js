@@ -220,7 +220,7 @@ state.setPontoActive=active=>{
   if(active&&!pontoFrame){
     const panel=$('painel-ponto');if(!panel)return;
     pontoFrame=document.createElement('iframe');pontoFrame.title='Ponto das Tarefas';
-    pontoFrame.src='./ponto.html';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent;color-scheme:normal';
+    pontoFrame.src='./ponto.html?v=20261105c';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
     panel.appendChild(pontoFrame);
   }
 };
