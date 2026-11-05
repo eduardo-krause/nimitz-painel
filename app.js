@@ -120,6 +120,10 @@ var COLUNAS = [
   {id:"cliente",     rot:"Cliente",           w:168, tipo:"multi"},
   {id:"ticket",      rot:"Ticket Movidesk",   w:120, tipo:"texto"},
   {id:"estimativa",  rot:"Est. Testes",       w:96,  tipo:"texto"},
+  /* Horas lançadas no Jira pela pessoa do campo Analista de Testes e pela do
+     campo Desenvolvedor. Vêm de /api/worklog-hours, não da busca: ver horasPainel. */
+  {id:"horasTeste",  rot:"Horas Testes",      w:104, tipo:"texto"},
+  {id:"horasDev",    rot:"Horas Dev",         w:96,  tipo:"texto"},
   /* Estas cinco já chegavam no mapear() e eram descartadas na exibição.
      Vêm escondidas por padrão para não estourar a largura da tabela. */
   {id:"versoes",     rot:"Versão",            w:128, tipo:"texto"},
@@ -580,7 +584,8 @@ function salvarMeta(){
    time: ficam só aqui e de propósito NÃO entram no pacote replicado. */
 function salvarPref(){
   try{ localStorage.setItem(LS_PESSOA, JSON.stringify({versaoSel:state.versaoSel, pessoa:state.pessoa,
-    ocultas:state.ocultas, statusSel:state.statusSel, hgSort:state.hgSort})); }catch(e){}
+    colunas:state.colunas, statusSel:state.statusSel, hgSort:state.hgSort})); }catch(e){}
+  salvarColunasServidor();
 }
 /* Assinatura do recorte que é do time. Sem ela, cada clique em "dispensar" —
    que é decisão pessoal e não vai para ninguém — agendaria uma replicação, e
@@ -627,7 +632,8 @@ function carregarLocal(){
     if(pp){
       if(pp.pessoa) state.pessoa = pp.pessoa;
       if(typeof pp.versaoSel === "string") state.versaoSel = pp.versaoSel;
-      if(Array.isArray(pp.ocultas)) state.ocultas = pp.ocultas;
+      if(pp.colunas) adotarColunas(pp.colunas);
+      else if(Array.isArray(pp.ocultas)){ state.colunas.tarefas = pp.ocultas.slice(); state.colunas.versoes = pp.ocultas.slice(); }
       if(Array.isArray(pp.statusSel)) state.statusSel = pp.statusSel;
       if(pp.hgSort && typeof pp.hgSort.col === "string"){
         state.hgSort = {col:pp.hgSort.col, dir:pp.hgSort.dir==="desc" ? "desc" : "asc"};
@@ -975,6 +981,8 @@ function mapear(node){
     versoes:     (f.fixVersions||[]).map(function(v){ return v.name; }).join(", "),
     prazo:       f.customfield_10044 || f.duedate || "",
     testAnalyst: pessoa(f.customfield_10048),
+    testAnalystId: ((f.customfield_10048||{}).accountId||""),
+    devId:       ((f.customfield_10047||{}).accountId||""),
     dev:         pessoa(f.customfield_10047),
     cliente:     opcoes(f.customfield_10343),
     ticket:      (f.customfield_10212==null ? "" : String(f.customfield_10212)),
@@ -1246,6 +1254,12 @@ function ordenadas(lista){
       // Interna vai sempre para o fim, independente da direção (pedido do Eduardo).
       if(ca.externo !== cb.externo) return ca.externo ? -1 : 1;
       va = ca.nome; vb = cb.nome;
+    } else if(COL_NUMERICAS[col]){
+      var xa = parseFloat(String(a[col]||"").replace(",",".")), xb = parseFloat(String(b[col]||"").replace(",","."));
+      var ka = isFinite(xa), kb = isFinite(xb);
+      if(ka && kb) return (xa-xb)*dir;
+      if(ka !== kb) return ka ? -1 : 1;   // vazio sempre no fim
+      return 0;
     } else {
       va = a[col]||""; vb = b[col]||"";
     }
@@ -1917,6 +1931,7 @@ function montarShell(){
   +       'feitas e vão para o fim da lista, riscadas. Se você desmarcar na mão, sua escolha prevalece.</div>'
   +       '<div class="pop-lista" id="pop-feito-lista"></div></div></div>'
   +     '<button class="btn" id="bt-so-prontas" title="Mostra apenas a fila de teste">'+icon("sparkles",14)+' Só prontas</button>'
+  +     botaoColunas("checklist")
   +     '<div class="toolbar-dir" id="cl-toolbar-dir">'
   +       '<button class="btn hidden" id="bt-parar-pessoa" title="Interromper a atualização em andamento">'+icon("x",14)+' Parar</button>'
   +       '<select id="sel-ordenacao" class="sel-inline" title="Como ordenar a lista. '
@@ -1976,6 +1991,7 @@ function montarShell(){
   +     '<div class="seg" style="margin-left:var(--sp-2);"><span class="seg-lab">Versão grava no Jira</span>'
   +       '<span class="seg-cx"><button type="button" id="bt-hg-grava-nao">Não</button>'
   +       '<button type="button" id="bt-hg-grava-sim">Sim</button></span></div>'
+  +     botaoColunas("homolog")
   +     '<div class="toolbar-dir"><span id="hg-cont"></span></div>'
   +   '</div>'
   +   '<div class="hg-lote hidden" id="hg-lote">'+icon("alert",14)
@@ -2474,6 +2490,7 @@ function desenharJanela(forcar){
 }
 
 function renderTabela(){
+  aplicarHoras(); agendarHoras();
   var lista = ordenadas(filtradas());
   linhasAtuais = lista;
   el["cont-linhas"].textContent = lista.length===state.tarefas.length
@@ -2676,6 +2693,7 @@ function ordenadasDaPessoa(pessoa){
 function clValorOrd(t, col){
   if(col === "versao") return versoesTexto(t);
   if(col === "cliente") return infoCliente(t).nome;
+  if(COLUNA_POR_ID[col]) return valorDaColuna(t, col);
   return t[col] || "";
 }
 /* A ordenação por coluna NÃO substitui a ordem definida: ela reordena por cima
@@ -2988,7 +3006,8 @@ function clTituloOrd(c, on){
 }
 function renderClCols(){
   if(!el["cl-cols"]) return;
-  el["cl-cols"].innerHTML = CL_COLUNAS.map(function(c){
+  aplicarCssColunas();
+  el["cl-cols"].innerHTML = colunasCabecalho("checklist", CL_COLUNAS).map(function(c){
     var dentro;
     if(c.ord){
       var on = state.clSort.col === c.ord;
@@ -2998,7 +3017,7 @@ function renderClCols(){
     } else {
       dentro = esc(c.rot);
     }
-    return '<span class="'+c.cls+'">'+dentro+'</span>';
+    return '<span class="'+c.cls+'"'+(c.w ? ' style="width:'+c.w+'px"' : '')+'>'+dentro+'</span>';
   }).join("");
   el["cl-cols"].querySelectorAll("[data-ord]").forEach(function(b){
     b.onclick = function(){ clOrdenarPor(b.getAttribute("data-ord")); };
@@ -3006,6 +3025,7 @@ function renderClCols(){
 }
 
 function renderClList(){
+  aplicarHoras(); agendarHoras();
   var d = clDerivados();
   var visiveis = d.visiveis;
   if(!visiveis.length){
@@ -3082,6 +3102,7 @@ function renderClList(){
       + '<span class="cl-versao cel-faint'+(ajusteDeVersao(t)?" ajustada":"")+'" title="'+esc(tituloVersao(t))+'">'
       +   esc(versoesTexto(t))+'</span>'
       + '<span class="cl-updated cel-faint'+mp.cls+'" title="'+esc(mp.titulo)+'">'+mp.icone+fmtData(t.prazo)+'</span>'
+      + celulasExtras("checklist", t)
       + '<button class="cl-dismiss" data-act="dispensa"'+(t.impedida?' disabled style="opacity:.35;cursor:default;"':'')
       +   ' title="'+(t.impedida ? "O impedimento está marcado no Jira; tire de lá para voltar à fila"
                      : estado==="dispensada" ? "Trazer de volta para a lista ativa (só para você)"
@@ -3398,6 +3419,7 @@ var HG_COLUNAS = [
 function hgValorOrd(t, col){
   if(col === "versao") return hgVersaoDe(t);
   if(col === "obs") return hgObs(t);
+  if(COLUNA_POR_ID[col]) return valorDaColuna(t, col);
   return t[col] || "";
 }
 /* O comparador de coluna é UM só para as duas abas: o que muda entre elas é de
@@ -3438,11 +3460,11 @@ function cmpColuna(col, dir, valorOrd){
       if(vb === SEM_VERSAO && va !== SEM_VERSAO) return -1;
       return va === vb ? 0 : va.localeCompare(vb,"pt-BR")*dir;
     }
-    if(col === "estimativa"){
+    if(col === "estimativa" || COL_NUMERICAS[col]){
       /* Estimativa é texto no Jira, mas quase sempre número: como texto, "10"
          viria antes de "2". Número quando dá, texto quando não dá. */
-      var ea = parseFloat(String(a.estimativa||"").replace(",","."));
-      var eb = parseFloat(String(b.estimativa||"").replace(",","."));
+      var ea = parseFloat(String(a[col]||"").replace(",","."));
+      var eb = parseFloat(String(b[col]||"").replace(",","."));
       var oka = isFinite(ea), okb = isFinite(eb);
       if(oka && okb) return ea === eb ? 0 : (ea-eb)*dir;
       if(oka !== okb) return oka ? -1 : 1;
@@ -3495,7 +3517,8 @@ function hgTituloOrd(c, on){
 }
 function renderHgCols(){
   if(!el["hg-cols"]) return;
-  el["hg-cols"].innerHTML = HG_COLUNAS.map(function(c){
+  aplicarCssColunas();
+  el["hg-cols"].innerHTML = colunasCabecalho("homolog", HG_COLUNAS).map(function(c){
     var dentro;
     if(c.ord){
       var on = state.hgSort.col === c.ord;
@@ -3505,7 +3528,7 @@ function renderHgCols(){
     } else {
       dentro = c.icone ? icon(c.icone,12) : esc(c.rot);
     }
-    return '<span class="'+c.cls+'"'+(c.tit ? ' title="'+esc(c.tit)+'"' : '')+'>'+dentro+'</span>';
+    return '<span class="'+c.cls+'"'+(c.tit ? ' title="'+esc(c.tit)+'"' : '')+(c.w ? ' style="width:'+c.w+'px"' : '')+'>'+dentro+'</span>';
   }).join("");
   el["hg-cols"].querySelectorAll("[data-ord]").forEach(function(b){
     b.onclick = function(){ hgOrdenarPor(b.getAttribute("data-ord")); };
@@ -3668,6 +3691,7 @@ function linhaHomolog(t){
     +   mp.icone+fmtData(t.prazo)+'</span>'
     + '<span class="hg-obs"><input type="text" data-obs="1" value="'+esc(hgObs(t))+'" placeholder="observação…"'
     +   ' title="Anotação do time para esta tarefa. Vale quando você sai do campo."></span>'
+    + celulasExtras("homolog", t)
     + '<span class="hg-act">'
     +   (fora
         ? '<button type="button" data-voltar="1" class="voltar" title="Trazer de volta para a fila de homologação">'
@@ -3679,6 +3703,7 @@ function linhaHomolog(t){
 }
 
 function renderHomolog(){
+  aplicarHoras(); agendarHoras();
   if(!el["hg-rows"]) return;
   renderHgCols();
   var d = hgDerivados();
@@ -4870,6 +4895,263 @@ window.nimitz.orderView = {
     if(state.pessoa===person) renderChecklistAll();
   }
 };
+/* ===================== colunas por aba e horas por pessoa =====================
+   Cada uma das quatro grades guarda a própria escolha de colunas. A escolha é
+   da pessoa: fica neste navegador (separada por conta) e no servidor, presa à
+   conta Atlassian, para voltar igual em outro computador.
+   - Tarefas e Versões: lista de colunas OCULTAS do catálogo COLUNAS.
+   - Checklist e Homologação: colunas próprias que dá para esconder (ocultas)
+     e campos do catálogo acrescentados à direita (extras). */
+var COL_NUMERICAS = {horasTeste:true, horasDev:true, tempoGasto:true, estimativa:true, estDesenv:true,
+  estRequisitos:true, estUX:true, estAnaliseTec:true, qtdReprov:true, qtdMotivos:true, qtdReprovAnt:true, gut:true, razaoTrab:true};
+var COLUNA_POR_ID = {};
+COLUNAS.forEach(function(c){ COLUNA_POR_ID[c.id] = c; });
+var OCULTAS_PADRAO = state.ocultas.slice();
+/* Colunas próprias de cada grade que podem sair. Chave, resumo, marca, fases e
+   ações ficam sempre: sem elas a linha perde o sentido. "sel" acha a célula
+   no cabeçalho e na linha. */
+var GRADE_NATIVAS = {
+  checklist: [
+    {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
+    {id:"squad", rot:"Squad", sel:".cl-squad"}, {id:"cliente", rot:"Cliente", sel:".cl-cliente"},
+    {id:"priority", rot:"Prioridade", sel:".cl-prio"}, {id:"versao", rot:"Versão", sel:".cl-versao"},
+    {id:"prazo", rot:"Entrega", sel:".cl-updated"}
+  ],
+  homolog: [
+    {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
+    {id:"testAnalyst", rot:"Testes", sel:".hg-testes,.hg-c-testes"}, {id:"estimativa", rot:"Est.", sel:".hg-est,.hg-c-est"},
+    {id:"versao", rot:"Versões Corrigidas", sel:".hg-versao,.hg-c-versao"}, {id:"prazo", rot:"Entrega", sel:".cl-updated"},
+    {id:"obs", rot:"Observação", sel:".hg-obs,.hg-c-obs"}
+  ]
+};
+/* Campos do catálogo que já aparecem como coluna própria da grade. */
+var GRADE_JA_TEM = {
+  checklist: {key:1, summary:1, type:1, status:1, squad:1, cliente:1, priority:1, prazo:1, versoes:1},
+  homolog:   {key:1, summary:1, type:1, status:1, testAnalyst:1, estimativa:1, prazo:1, versoes:1}
+};
+var GRADE_PAINEL = {checklist:"#painel-checklist", homolog:"#painel-homolog"};
+var GRADE_LINHA = {checklist:[".cl-cols",".cl-row"], homolog:[".hg-cols",".hg-row"]};
+
+state.colunas = {tarefas:OCULTAS_PADRAO.slice(), versoes:OCULTAS_PADRAO.slice(),
+  checklist:{ocultas:[], extras:[]}, homolog:{ocultas:[], extras:[]}};
+/* state.ocultas continua existindo para o código da tabela, mas agora aponta
+   para a escolha da aba aberta (Tarefas ou Versões). */
+function abaDaTabela(){ return state.aba === "versoes" ? "versoes" : "tarefas"; }
+Object.defineProperty(state, "ocultas", {
+  configurable:true, enumerable:true,
+  get:function(){ return state.colunas[abaDaTabela()]; },
+  set:function(v){ state.colunas[abaDaTabela()] = Array.isArray(v) ? v.slice() : []; }
+});
+function listaDeIds(v, valido){ return Array.isArray(v) ? v.filter(function(x){ return typeof x === "string" && valido(x); }) : null; }
+function adotarColunas(c){
+  if(!c || typeof c !== "object") return;
+  ["tarefas","versoes"].forEach(function(aba){
+    var l = listaDeIds(c[aba], function(id){ return !!COLUNA_POR_ID[id]; });
+    if(l) state.colunas[aba] = l;
+  });
+  ["checklist","homolog"].forEach(function(g){
+    var v = c[g]; if(!v || typeof v !== "object") return;
+    var nat = {}; GRADE_NATIVAS[g].forEach(function(n){ nat[n.id] = true; });
+    var oc = listaDeIds(v.ocultas, function(id){ return !!nat[id]; });
+    var ex = listaDeIds(v.extras, function(id){ return !!COLUNA_POR_ID[id] && !GRADE_JA_TEM[g][id]; });
+    state.colunas[g] = {ocultas:oc || [], extras:ex || []};
+  });
+}
+
+/* ---- servidor: a escolha segue a conta ---- */
+var colunasServidorTimer = null, colunasServidorOk = false;
+function salvarColunasServidor(){
+  if(!colunasServidorOk || !jiraDisponivel()) return;
+  clearTimeout(colunasServidorTimer);
+  colunasServidorTimer = setTimeout(function(){
+    window.nimitz.request("/api/prefs/save", {colunas:state.colunas}).catch(function(){});
+  }, 800);
+}
+function carregarColunasServidor(){
+  if(!jiraDisponivel()) return;
+  window.nimitz.request("/api/prefs/get", {}).then(function(r){
+    colunasServidorOk = true;
+    if(r && r.prefs && r.prefs.colunas){
+      adotarColunas(r.prefs.colunas);
+      try{ var pp = JSON.parse(localStorage.getItem(LS_PESSOA)||"{}"); pp.colunas = state.colunas; delete pp.ocultas;
+        localStorage.setItem(LS_PESSOA, JSON.stringify(pp)); }catch(e){}
+      redesenharGrades();
+    } else {
+      salvarColunasServidor();   // primeira vez: leva a escolha deste navegador
+    }
+  }).catch(function(){ /* backend antigo ou sem conexão: fica só no navegador */ });
+}
+function redesenharGrades(){
+  try{ renderToolbar(); cabecalho(); renderTabela(); }catch(e){}
+  try{ renderChecklistAll(); }catch(e){}
+  try{ renderHomolog(); }catch(e){}
+}
+
+/* ---- Checklist e Homologação ---- */
+function extrasDaGrade(g){
+  var ex = state.colunas[g].extras;
+  return COLUNAS.filter(function(c){ return ex.indexOf(c.id) !== -1 && !GRADE_JA_TEM[g][c.id]; });
+}
+function colunasCabecalho(g, base){
+  var extras = extrasDaGrade(g).map(function(c){ return {cls:"g-extra", rot:c.rot, ord:c.id, w:c.w}; });
+  return base.slice(0, -1).concat(extras, base.slice(-1));
+}
+function celulasExtras(g, t){
+  return extrasDaGrade(g).map(function(c){
+    var v = valorDaColuna(t, c.id);
+    return '<span class="g-extra cel-faint'+(COL_NUMERICAS[c.id] ? " g-num" : "")+'" style="width:'+c.w+'px" title="'+esc(v)+'">'+esc(v)+'</span>';
+  }).join("");
+}
+function aplicarCssColunas(){
+  var css = ".g-extra{flex:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm);}"
+    + ".g-extra.g-num{font-family:var(--font-mono);font-size:var(--fs-xs);}"
+    + "#pop-col-checklist,#pop-col-homolog{left:auto;right:0;}";
+  ["checklist","homolog"].forEach(function(g){
+    state.colunas[g].ocultas.forEach(function(id){
+      var n = GRADE_NATIVAS[g].filter(function(x){ return x.id === id; })[0]; if(!n) return;
+      n.sel.split(",").forEach(function(sel){
+        GRADE_LINHA[g].forEach(function(linha){ css += GRADE_PAINEL[g]+" "+linha+" > "+sel+"{display:none}"; });
+      });
+    });
+  });
+  var tag = document.getElementById("grade-colunas-css");
+  if(!tag){ tag = document.createElement("style"); tag.id = "grade-colunas-css"; document.head.appendChild(tag); }
+  if(tag.textContent !== css) tag.textContent = css;
+}
+function botaoColunas(g){
+  return '<div class="dd" id="dd-col-'+g+'"><button class="btn" id="bt-col-'+g+'">'+icon("table",14)
+    + ' Colunas <span class="contador" id="ct-col-'+g+'"></span></button>'
+    + '<div class="pop hidden" id="pop-col-'+g+'"><div class="pop-cab">Colunas desta lista. A escolha é sua e fica salva na sua conta.</div>'
+    + '<div class="pop-acoes"><button data-gcols="padrao">Padrão</button><button data-gcols="limpar">Tirar campos extras</button></div>'
+    + '<div class="pop-lista" id="lista-col-'+g+'"></div></div></div>';
+}
+function itemColuna(attr, id, rot, on){
+  return '<button class="pop-item'+(on?" on":"")+'" '+attr+'="'+esc(id)+'">'
+    + '<span class="chk'+(on?" on":"")+'">'+(on?icon("check",10):"")+'</span>'+esc(rot)+'</button>';
+}
+function renderPopColunas(g){
+  var lista = document.getElementById("lista-col-"+g); if(!lista) return;
+  var cfg = state.colunas[g];
+  var nativas = GRADE_NATIVAS[g].map(function(n){ return itemColuna("data-gnat", n.id, n.rot, cfg.ocultas.indexOf(n.id) === -1); }).join("");
+  var catalogo = COLUNAS.filter(function(c){ return !GRADE_JA_TEM[g][c.id]; })
+    .map(function(c){ return itemColuna("data-gext", c.id, c.rot, cfg.extras.indexOf(c.id) !== -1); }).join("");
+  lista.innerHTML = '<div class="pop-cab">Desta lista</div>' + nativas + '<div class="pop-cab">Mais campos do Jira</div>' + catalogo;
+  var vis = GRADE_NATIVAS[g].length - cfg.ocultas.length + cfg.extras.length;
+  var ct = document.getElementById("ct-col-"+g); if(ct) ct.textContent = cfg.extras.length || cfg.ocultas.length ? String(vis) : "";
+  var bt = document.getElementById("bt-col-"+g); if(bt) bt.classList.toggle("btn-on", !!(cfg.extras.length || cfg.ocultas.length));
+}
+function alternarColunaGrade(g, tipo, id){
+  var cfg = state.colunas[g], lista = tipo === "nat" ? cfg.ocultas : cfg.extras;
+  var i = lista.indexOf(id);
+  var nova = i === -1 ? lista.concat([id]) : lista.filter(function(x){ return x !== id; });
+  if(tipo === "nat") cfg.ocultas = nova; else cfg.extras = nova;
+  salvarPref(); renderPopColunas(g); redesenharGrade(g);
+}
+function redesenharGrade(g){ if(g === "checklist") renderChecklistAll(); else renderHomolog(); }
+function ligarColunasGrade(){
+  ["checklist","homolog"].forEach(function(g){
+    var bt = document.getElementById("bt-col-"+g), pop = document.getElementById("pop-col-"+g);
+    if(!bt || !pop) return;
+    bt.onclick = function(e){ e.stopPropagation(); renderPopColunas(g); pop.classList.toggle("hidden"); };
+    pop.addEventListener("click", function(e){
+      e.stopPropagation();
+      var b = e.target.closest("button"); if(!b) return;
+      if(b.hasAttribute("data-gnat")) return alternarColunaGrade(g, "nat", b.getAttribute("data-gnat"));
+      if(b.hasAttribute("data-gext")) return alternarColunaGrade(g, "ext", b.getAttribute("data-gext"));
+      var a = b.getAttribute("data-gcols");
+      if(a === "padrao") state.colunas[g] = {ocultas:[], extras:[]};
+      if(a === "limpar") state.colunas[g].extras = [];
+      if(a){ salvarPref(); renderPopColunas(g); redesenharGrade(g); }
+    });
+    document.addEventListener("click", function(e){
+      if(!pop.classList.contains("hidden") && !e.target.closest("#dd-col-"+g)) pop.classList.add("hidden");
+    });
+    renderPopColunas(g);
+  });
+  aplicarCssColunas();
+  carregarColunasServidor();
+}
+
+/* ---- horas por pessoa (Horas Testes / Horas Dev) ----
+   O total da tarefa já vem na busca (timespent). Quem lançou cada hora não vem:
+   sai de /api/worklog-hours, em lotes, só para tarefas com tempo gasto e só
+   quando alguma grade mostra uma das duas colunas. Fica guardado por tarefa
+   com a data de atualização do Jira: lançar hora muda essa data, e aí a tarefa
+   é consultada de novo. */
+var LS_HORAS = window.nimitz.storagePrefix+"horasPorPessoa";
+var HORAS = {};
+try{ HORAS = JSON.parse(localStorage.getItem(LS_HORAS)||"{}") || {}; }catch(e){ HORAS = {}; }
+var horasRodando = false, horasTimer = null, horasParado = false;
+function horasPessoa(reg, id, nome){
+  if(!reg) return null;
+  var seg = 0, achou = false;
+  if(id && reg.h[id] != null){ seg = reg.h[id]; achou = true; }
+  else if(nome){ Object.keys(reg.n||{}).forEach(function(acc){ if(reg.n[acc] === nome){ seg += reg.h[acc]||0; achou = true; } }); }
+  return achou ? seg : 0;
+}
+function fmtHoras(seg){ return seg == null ? "" : String(Math.round(seg/360)/10); }
+function aplicarHoras(){
+  state.tarefas.forEach(function(t){
+    var semTempo = !t.tempoGasto || t.tempoGasto === "0";
+    var reg = HORAS[t.key];
+    if(semTempo){ t.horasTeste = t.testAnalyst ? "0" : ""; t.horasDev = t.dev ? "0" : ""; return; }
+    if(!reg){ t.horasTeste = ""; t.horasDev = ""; return; }
+    t.horasTeste = t.testAnalyst ? fmtHoras(horasPessoa(reg, t.testAnalystId, t.testAnalyst)) : "";
+    t.horasDev = t.dev ? fmtHoras(horasPessoa(reg, t.devId, t.dev)) : "";
+  });
+}
+function horasEmUso(){
+  var t = state.colunas.tarefas, v = state.colunas.versoes;
+  var naTabela = t.indexOf("horasTeste") === -1 || t.indexOf("horasDev") === -1 || v.indexOf("horasTeste") === -1 || v.indexOf("horasDev") === -1;
+  var nasGrades = ["checklist","homolog"].some(function(g){ var e = state.colunas[g].extras; return e.indexOf("horasTeste") !== -1 || e.indexOf("horasDev") !== -1; });
+  return naTabela || nasGrades;
+}
+function agendarHoras(){
+  if(horasRodando || horasParado || !jiraDisponivel() || !horasEmUso()) return;
+  clearTimeout(horasTimer);
+  horasTimer = setTimeout(buscarHoras, 600);
+}
+function horasPendentes(){
+  return state.tarefas.filter(function(t){
+    if(!t.tempoGasto || t.tempoGasto === "0" || (!t.testAnalyst && !t.dev)) return false;
+    var reg = HORAS[t.key];
+    return !reg || reg.u !== t.updated;
+  }).map(function(t){ return t.key; });
+}
+function guardarHoras(){
+  try{ localStorage.setItem(LS_HORAS, JSON.stringify(HORAS)); }
+  catch(e){ HORAS = {}; try{ localStorage.removeItem(LS_HORAS); }catch(e2){} }
+}
+function buscarHoras(){
+  var pend = horasPendentes(); if(!pend.length) return;
+  horasRodando = true;
+  var porChave = {}; state.tarefas.forEach(function(t){ porChave[t.key] = t; });
+  var lotes = []; for(var i=0;i<pend.length;i+=20) lotes.push(pend.slice(i, i+20));
+  var feitos = 0;
+  (function proximo(){
+    if(!lotes.length){
+      horasRodando = false; guardarHoras(); redesenharGrades(); return;
+    }
+    var lote = lotes.shift();
+    window.nimitz.request("/api/worklog-hours", {keys:lote}).then(function(r){
+      Object.keys(r.issues||{}).forEach(function(k){
+        var t = porChave[k], n = {};
+        Object.keys(r.issues[k]).forEach(function(acc){ if(r.names && r.names[acc]) n[acc] = r.names[acc]; });
+        HORAS[k] = {u:t ? t.updated : "", h:r.issues[k], n:n};
+      });
+      feitos += lote.length;
+      if(feitos % 200 < 20){ guardarHoras(); redesenharGrades(); }
+      proximo();
+    }).catch(function(e){
+      horasRodando = false; guardarHoras(); redesenharGrades();
+      /* Backend sem a rota (ainda não publicado) ou conexão caída: não insiste
+         a cada redesenho. Recarregar a página tenta de novo. */
+      horasParado = true;
+      console.warn("Horas por pessoa indisponíveis:", e && e.message);
+    });
+  })();
+}
+
 /* ===================== início ===================== */
 montarShell();
 carregarLocal();
@@ -4879,6 +5161,7 @@ aplicarReplicado();
 inicializarCheck();
 revivarSeNecessario();
 ligarEventos();
+ligarColunasGrade();
 iniciarReplicacao();
 renderTudo();
 aplicarRetomada();
