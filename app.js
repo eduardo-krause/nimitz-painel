@@ -120,8 +120,9 @@ var COLUNAS = [
   {id:"cliente",     rot:"Cliente",           w:168, tipo:"multi"},
   {id:"ticket",      rot:"Ticket Movidesk",   w:120, tipo:"texto"},
   {id:"estimativa",  rot:"Est. Testes",       w:96,  tipo:"texto"},
-  /* Horas lançadas no Jira pela pessoa do campo Analista de Testes e pela do
-     campo Desenvolvedor. Vêm de /api/worklog-hours, não da busca: ver horasPainel. */
+  /* Horas lançadas no Jira pela pessoa de cada campo: Analista de Requisitos,
+     Analista de Testes e Desenvolvedor. Vêm de /api/worklog-hours, não da busca. */
+  {id:"horasAnalista", rot:"Horas Analista",  w:112, tipo:"texto"},
   {id:"horasTeste",  rot:"Horas Testes",      w:104, tipo:"texto"},
   {id:"horasDev",    rot:"Horas Dev",         w:96,  tipo:"texto"},
   /* Estas cinco já chegavam no mapear() e eram descartadas na exibição.
@@ -995,6 +996,7 @@ function mapear(node){
     reporter: pessoa(f.reporter),
     creator: pessoa(f.creator),
     analistaReq: pessoa(f.customfield_10057),
+    analistaReqId: ((f.customfield_10057||{}).accountId||""),
     analiseTecnica: pessoa(f.customfield_10093),
     ux: pessoa(f.customfield_10129),
     devOrigem: pessoa(f.customfield_10096),
@@ -4902,7 +4904,7 @@ window.nimitz.orderView = {
    - Tarefas e Versões: lista de colunas OCULTAS do catálogo COLUNAS.
    - Checklist e Homologação: colunas próprias que dá para esconder (ocultas)
      e campos do catálogo acrescentados à direita (extras). */
-var COL_NUMERICAS = {horasTeste:true, horasDev:true, tempoGasto:true, estimativa:true, estDesenv:true,
+var COL_NUMERICAS = {horasAnalista:true, horasTeste:true, horasDev:true, tempoGasto:true, estimativa:true, estDesenv:true,
   estRequisitos:true, estUX:true, estAnaliseTec:true, qtdReprov:true, qtdMotivos:true, qtdReprovAnt:true, gut:true, razaoTrab:true};
 var COLUNA_POR_ID = {};
 COLUNAS.forEach(function(c){ COLUNA_POR_ID[c.id] = c; });
@@ -5094,16 +5096,17 @@ function aplicarHoras(){
   state.tarefas.forEach(function(t){
     var semTempo = !t.tempoGasto || t.tempoGasto === "0";
     var reg = HORAS[t.key];
-    if(semTempo){ t.horasTeste = t.testAnalyst ? "0" : ""; t.horasDev = t.dev ? "0" : ""; return; }
-    if(!reg){ t.horasTeste = ""; t.horasDev = ""; return; }
+    if(semTempo){ t.horasAnalista = t.analistaReq ? "0" : ""; t.horasTeste = t.testAnalyst ? "0" : ""; t.horasDev = t.dev ? "0" : ""; return; }
+    if(!reg){ t.horasAnalista = ""; t.horasTeste = ""; t.horasDev = ""; return; }
+    t.horasAnalista = t.analistaReq ? fmtHoras(horasPessoa(reg, t.analistaReqId, t.analistaReq)) : "";
     t.horasTeste = t.testAnalyst ? fmtHoras(horasPessoa(reg, t.testAnalystId, t.testAnalyst)) : "";
     t.horasDev = t.dev ? fmtHoras(horasPessoa(reg, t.devId, t.dev)) : "";
   });
 }
+var COL_HORAS = ["horasAnalista","horasTeste","horasDev"];
 function horasEmUso(){
-  var t = state.colunas.tarefas, v = state.colunas.versoes;
-  var naTabela = t.indexOf("horasTeste") === -1 || t.indexOf("horasDev") === -1 || v.indexOf("horasTeste") === -1 || v.indexOf("horasDev") === -1;
-  var nasGrades = ["checklist","homolog"].some(function(g){ var e = state.colunas[g].extras; return e.indexOf("horasTeste") !== -1 || e.indexOf("horasDev") !== -1; });
+  var naTabela = ["tarefas","versoes"].some(function(a){ return COL_HORAS.some(function(id){ return state.colunas[a].indexOf(id) === -1; }); });
+  var nasGrades = ["checklist","homolog"].some(function(g){ return COL_HORAS.some(function(id){ return state.colunas[g].extras.indexOf(id) !== -1; }); });
   return naTabela || nasGrades;
 }
 function agendarHoras(){
@@ -5113,7 +5116,7 @@ function agendarHoras(){
 }
 function horasPendentes(){
   return state.tarefas.filter(function(t){
-    if(!t.tempoGasto || t.tempoGasto === "0" || (!t.testAnalyst && !t.dev)) return false;
+    if(!t.tempoGasto || t.tempoGasto === "0" || (!t.analistaReq && !t.testAnalyst && !t.dev)) return false;
     var reg = HORAS[t.key];
     return !reg || reg.u !== t.updated;
   }).map(function(t){ return t.key; });
