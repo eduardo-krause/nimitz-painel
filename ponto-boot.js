@@ -1,4 +1,4 @@
-import {createBridge} from './ponto-bridge.js?v=20261105d';
+import {createBridge} from './ponto-bridge.js?v=20261105e';
 const api=window.parent!==window?window.parent.nimitz:null;
 // O Ponto segue o tema do painel (o painel usa o do sistema, ou data-theme se definido).
 function followPanelTheme(){
@@ -18,14 +18,14 @@ function showOnly(content){
   document.body.append(box);
 }
 if(!api?.connected||api.preview){
-  showOnly('<div class="rotulo-ponto">Ponto das Tarefas</div><p>Conecte sua conta Atlassian no botão <b>Conexão</b> do painel para registrar suas horas.</p>');
+  showOnly('<div class="rotulo-ponto">Registro</div><p>Conecte sua conta Atlassian no botão <b>Conexão</b> do painel para registrar suas horas.</p>');
 }else{
   try{
     window.pontoBridge=await createBridge(api);
     window.pontoApi=api;
-    await import('./ponto-app.js?v=20261105d');
+    await import('./ponto-app.js?v=20261105e');
   }catch(error){
-    const message=document.createElement('p');message.className='ponto-erro';message.textContent='Não foi possível abrir o Ponto: '+error.message;
+    const message=document.createElement('p');message.className='ponto-erro';message.textContent='Não foi possível abrir o Registro: '+error.message;
     showOnly(message);
   }
 }

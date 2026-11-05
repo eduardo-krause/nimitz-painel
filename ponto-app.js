@@ -372,7 +372,7 @@
     const run = !!(timer&&timer.running);
     window.pontoApi.updatePontoTimer?.(timer);
     $("clock").textContent = run ? hms(Date.now()-timer.start) : "0:00:00";
-    document.title = run ? hms(Date.now()-timer.start)+" · "+(timer.task?labelOf(timer):timer.issue) : "Ponto das Tarefas";
+    document.title = run ? hms(Date.now()-timer.start)+" · "+(timer.task?labelOf(timer):timer.issue) : "Registro";
   }
   setInterval(tick,1000);
 
@@ -1137,7 +1137,7 @@
   paintCats(); paintTasks(); render(); paintTimer();
   (async ()=>{
     const cl = window.pontoBridge;
-    if(!cl || !cl.use){ $("connState").textContent="Offline"; showBanner("Abra o Ponto pelo painel Nimitz e conecte sua conta.","err"); return; }
+    if(!cl || !cl.use){ $("connState").textContent="Offline"; showBanner("Abra o Registro pelo painel Nimitz e conecte sua conta.","err"); return; }
     const [dbNs, mcpNs, uNs] = await Promise.all([cl.use("db"), cl.use("mcp"), cl.use("user")]);
     db = dbNs; mcp = mcpNs;
     if(!db){ $("connState").textContent="Sem armazenamento"; showBanner("Os lançamentos não podem ser salvos agora. Recarregue o painel.","err"); $("days").innerHTML=""; return; }

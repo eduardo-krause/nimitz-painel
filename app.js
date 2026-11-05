@@ -1818,7 +1818,7 @@ function montarShell(){
   +     '<button class="aba-btn" data-aba="versoes">'+icon("tag",14)+' Versões</button>'
   +     '<button class="aba-btn" data-aba="checklist">'+icon("check",14)+' Checklist <span class="badge hidden" id="badge-cl">0</span></button>'
   +     '<button class="aba-btn" data-aba="homolog">'+icon("flask",14)+' Homologação <span class="badge hidden" id="badge-hg">0</span></button>'
-  +     '<button class="aba-btn" data-aba="ponto">'+icon("clock",14)+' Ponto <span id="ponto-timer-badge" class="badge" hidden></span></button>'
+  +     '<button class="aba-btn" data-aba="ponto">'+icon("clock",14)+' Registro <span id="ponto-timer-badge" class="badge" hidden></span></button>'
   +   '</nav>'
   +   '<div class="campo-versao hidden" id="cx-versao">'
   +     '<select class="sel-inline" id="sel-versao" title="Recorta a lista por versão"></select>'

@@ -55,7 +55,7 @@ export async function createBridge(api){
       pending++;
       const operation=serial.catch(()=>{}).then(async()=>{
         const current=documents.get(spec.path);
-        if(action==='update'&&!current) throw new Error('Registro não encontrado. Atualize o Ponto.');
+        if(action==='update'&&!current) throw new Error('Lançamento não encontrado. Atualize a página.');
         const body={path:spec.path,revision:current?.revision||0};
         if(action==='remove') body.remove=true;
         else body.data=action==='update'?{...current.data,...data}:data;
