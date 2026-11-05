@@ -15,19 +15,15 @@
   let allEntries=[];
   const alive = e => !e.deleted;
   // cada pessoa grava em data/users/<id>/...; a equipe lê tudo (regras do db)
-  let uid=null, userNs=null, members=[], team={}, teamSubs={}, names={};
-  // perfis: várias pessoas na mesma conta do Claude. Pessoa = "<conta>:<perfil>"; o perfil "main" usa os caminhos antigos.
-  let pid = "main", myProfiles = [{id:"main"}], jiraOwner = "main", memberDocs = {}, mySubs = [];
-  const docName = (p, base) => p==="main" ? base : base+"_"+p;
-  const entriesCol = (u, p) => db.doc("data/users/"+u+"/"+(p==="main" ? "profile" : p)).collection("entries");
-  const myEntries = () => entriesCol(uid, pid);
-  const myTimer = () => db.doc("data/users/"+uid+"/"+docName(pid,"timer"));
-  const mySettings = () => db.doc("data/users/"+uid+"/"+docName(pid,"settings"));
-  const myKey = () => uid+":"+pid;
-  const isJiraOwner = () => pid===jiraOwner;
-  function profilesOf(u){ return u===uid ? myProfiles : ((memberDocs[u]&&memberDocs[u].profiles) || [{id:"main"}]); }
-  function profName(u, p){ const pr = profilesOf(u).find(x=>x.id===p); return (pr && pr.name) || (p==="main" ? names[u] : "") || "Alguém da equipe"; }
-  const personName = k => { const [u, p] = String(k).split(":"); const n = profName(u, p||"main"); return k===myKey() ? n+" (você)" : n; };
+  let uid=null, members=[], team={}, teamSubs={}, names={};
+  // cada conta Atlassian é uma pessoa; a identidade vem do Jira, pelo Worker
+  let memberDocs = {}, mySubs = [];
+  const entriesCol = u => db.doc("data/users/"+u+"/profile").collection("entries");
+  const myEntries = () => entriesCol(uid);
+  const myTimer = () => db.doc("data/users/"+uid+"/timer");
+  const mySettings = () => db.doc("data/users/"+uid+"/settings");
+  const myKey = () => uid;
+  const personName = k => { const n = names[k] || (memberDocs[k]&&memberDocs[k].name) || "Alguém da equipe"; return k===uid ? n+" (você)" : n; };
   const LS = k => window.pontoApi.storagePrefix+"ponto."+k;
   function lsGet(k){ try{ return localStorage.getItem(LS(k)); }catch(_){ return null; } }
   function lsSet(k,v){ try{ localStorage.setItem(LS(k), v); }catch(_){} }
@@ -132,15 +128,12 @@
     return {list, perm, who: w ? w[1] : ""};
   }
   function mcpMsg(e, isWrite){
-    switch(e&&e.code){
-      case "needs_reauth": return "Reconecte o Atlassian MCP em claude.ai → Configurações → Conectores.";
-      case "server_not_connected": case "server_not_found": return "Adicione o conector Atlassian MCP em claude.ai → Configurações → Conectores.";
-      case "selection_required": return "Há mais de um conector Atlassian; escolha qual usar no aviso do claude.ai.";
-      case "not_in_manifest": return "O Jira não foi liberado para esta página. Libere no menu Permissões do artefato.";
+    switch(e && e.status===401 ? "auth" : e&&e.code){
+      case "auth": return "Sua conexão com o Jira expirou ou foi recusada. Abra Conexão no painel e entre de novo.";
       case "approval_required": return "O envio precisa da sua aprovação. Clique em enviar de novo e aprove.";
       case "blocked_by_policy": return "A política da organização bloqueia essa chamada ao Jira.";
       case "tool_error": { const j = jiraDetail(e);
-        if(j.perm) return `O usuário do Jira desta conta${j.who?" ("+j.who+")":""} não tem permissão para registrar trabalho nesta issue. Peça ao administrador do Jira a permissão “Registrar trabalho” no projeto, ou lance manualmente.`;
+        if(j.perm) return `O usuário do Jira desta conta${j.who?" ("+j.who+")":""} não tem permissão para registrar trabalho nesta issue. Peça ao administrador do Jira a permissão “Registrar trabalho” no projeto.`;
         return "Jira recusou: "+(j.list.length ? j.list.join(" ") : String(e.message||"erro sem mensagem").slice(0,200)); }
       case "server_unavailable": case "upstream_error":
         return isWrite ? "Sem resposta do Jira. Confira na issue se o worklog entrou antes de reenviar." : "Jira sem resposta agora; tente de novo em instantes.";
@@ -208,7 +201,7 @@
     const target = jiraOf(en); if(!target) return;
     const wl = en.worklog||{};
     if(wl.status==="sent" && !wl.dirty) return;
-    const col = myEntries(); // fixa a pessoa: trocar de perfil durante o envio não grava no lugar errado
+    const col = myEntries();
     local[en.id]={sending:true}; render();
     const input = {entryId:en.id,cloudId:CLOUD,issueIdOrKey:target,timeSpent:jiraSpent(en.end-en.start),started:isoJira(en.start)};
     const comment = catName(en);
@@ -336,7 +329,7 @@
     await ref.set(en);
     await myTimer().set({running:false});
     $("issueIn").value=""; $("startIn").value=""; if(catWasAuto){ $("catIn").value=""; catWasAuto=false; } onIssueInput(); paintTimer();
-    if(isJiraOwner() && settings.autoSend && window.pontoApi.worklogWrites && jiraOf(en)) sendWorklog(Object.assign({id:ref.id},en));
+    if(settings.autoSend && window.pontoApi.worklogWrites && jiraOf(en)) sendWorklog(Object.assign({id:ref.id},en));
   }
 
   function paintTimer(){
@@ -410,18 +403,6 @@
     return entries.filter(e=>e.start>=a && e.start<b);
   }
 
-  // formulário "Registrar trabalho" do Jira com tempo e comentário preenchidos (a data o Jira não aceita pelo endereço)
-  const JIRA_BASE = SITE.replace(/\/browse\/$/,"");
-  // data no formato que o Jira mostra no campo "Data de Início": 14/out/26 3:10 PM
-  function jiraDate(ms){
-    const d = new Date(ms), h = d.getHours(), h12 = h%12 || 12;
-    return pad(d.getDate())+"/"+MON[d.getMonth()]+"/"+String(d.getFullYear()).slice(2)+" "+h12+":"+pad(d.getMinutes())+" "+(h<12?"AM":"PM");
-  }
-  function worklogUrl(en){
-    const q = new URLSearchParams({key: jiraOf(en), timeLogged: jiraSpent(en.end-en.start), startDate: jiraDate(en.start)});
-    const c = catName(en); if(c) q.set("comment", c);
-    return JIRA_BASE+"/secure/CreateWorklog!default.jspa?"+q.toString();
-  }
   function statusPill(en){
     const L = local[en.id]||{};
     if(!jiraOf(en)) return '<span class="pill pending" title="Tarefa interna sem issue do Jira vinculada">Só aqui</span>';
@@ -429,10 +410,6 @@
     const w = en.worklog||{status:"pending"};
     if(w.status==="manual") return w.dirty ? `<span class="pill check" title="Editado depois de lançar; ajuste o registro direto no Jira">Ajustar no Jira</span>`
       : `<span class="pill sent" title="Lançado manualmente em ${w.sentAt?new Date(w.sentAt).toLocaleString("pt-BR"):""} como ${esc(w.spent||"")}">Lançado</span>`;
-    if(!isJiraOwner() && w.status!=="sent"){
-      return `<a class="pill pending" href="${esc(worklogUrl(en))}" target="_blank" rel="noopener" data-manual="${en.id}" title="Abre o Registrar trabalho do Jira já com o tempo preenchido">Lançar no Jira</a>`
-        + (L.copied ? ` <button class="pill sent" data-manualdone="${en.id}" title="Marcar como lançado no Jira">Já lancei</button>` : "");
-    }
     if(w.status==="sent" && w.dirty) return w.id ? `<button class="pill check" data-send="${en.id}" title="Editado depois do envio. Clique para atualizar o worklog no Jira">Atualizar Jira</button>` : `<span class="pill check" title="Editado depois do envio; ajuste o worklog direto no Jira">Ajustar no Jira</span>`;
     if(w.status==="sent") return `<span class="pill sent" title="Enviado ${w.sentAt?new Date(w.sentAt).toLocaleString("pt-BR"):""} como ${esc(w.spent||"")}">No Jira</span>`;
     if(w.status==="check") return `<button class="pill check" data-send="${en.id}" title="${esc(w.error||"")}">Verificar</button>`;
@@ -440,8 +417,8 @@
     return `<button class="pill pending" data-send="${en.id}" title="Enviar como worklog">Enviar</button>`;
   }
 
-  // worklog enviado por esta conta (dono do login do Jira) pode ser reduzido a 1m ao excluir
-  const zeroable = en => isJiraOwner() && !!(en.worklog && en.worklog.id) && en.worklog.status==="sent" && !!jiraOf(en);
+  // worklog enviado por esta conta pode ser excluído junto no Jira
+  const zeroable = en => !!(en.worklog && en.worklog.id) && en.worklog.status==="sent" && !!jiraOf(en);
 
   const ICON = {
     play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
@@ -475,7 +452,7 @@
     const runMs = (timer&&timer.running&&timer.start>=weekStart.getTime()&&timer.start<weekStart.getTime()+7*864e5)?0:0;
     const total = wk.reduce((s,e)=>s+((e.end||Date.now())-e.start),0)+runMs;
     $("wkTotal").textContent = hm(total);
-    const pendCount = !isJiraOwner() ? 0 : wk.filter(x=>x.end && jiraOf(x) && (!x.worklog || ["pending","error"].includes(x.worklog.status) || (x.worklog.status==="sent"&&x.worklog.dirty&&x.worklog.id))).length;
+    const pendCount = wk.filter(x=>x.end && jiraOf(x) && (!x.worklog || ["pending","error"].includes(x.worklog.status) || (x.worklog.status==="sent"&&x.worklog.dirty&&x.worklog.id))).length;
     $("sendAll").hidden = !pendCount || !mcp; $("sendAll").textContent = `Enviar ${pendCount} pendente${pendCount>1?"s":""}`;
 
     // agrupa por dia
@@ -508,7 +485,7 @@
                  <button class="icon" title="Editar" data-edit-btn="${en.id}">${ICON.edit}</button>
                  <button class="icon" title="Excluir" data-del="${en.id}">${ICON.del}</button>`}
           </div>
-          ${L.copied?`<div class="msg info"><button type="button" class="linkbtn" data-bm>Instalar o “⏱ Preencher data” (uma vez) para não precisar colar</button></div>`:""}${L.msg?`<div class="msg ${L.msgKind==="warn"?"warn":L.msgKind==="info"?"info":""}">${esc(L.msg)}</div>`:(w.status==="error"&&w.error?`<div class="msg">${esc(w.error)}</div>`:"")}
+          ${L.msg?`<div class="msg ${L.msgKind==="warn"?"warn":L.msgKind==="info"?"info":""}">${esc(L.msg)}</div>`:(w.status==="error"&&w.error?`<div class="msg">${esc(w.error)}</div>`:"")}
           ${confirmDel===en.id && (w.status==="sent" || w.id) ?`<div class="msg warn">${zeroable(en) ? "Este lançamento será excluído também do Jira. Esta ação não pode ser desfeita pelo painel." : "Já está no Jira. Excluir aqui não remove o registro de lá; ajuste direto no Jira."}</div>`:""}
         </div>`;
       });
@@ -554,23 +531,6 @@
       const msg = r.err ? mcpMsg(r.err,false) : r.notFound ? "Issue "+key+" não encontrada no Jira. Confira o número em Editar." : "";
       entries.filter(e=>e.issue===key && !e.summary).forEach(e=>{ local[e.id] = msg ? {msg, msgKind:"warn", fix:true} : {}; });
       render();
-    }
-    else if(t.dataset.manual){
-      // não impede o link: a issue abre numa aba nova enquanto o tempo vai para a área de transferência
-      const en=find(t.dataset.manual); if(!en) return;
-      const spent = jiraSpent(en.end-en.start), when = jiraDate(en.start);
-      let ok = true; try{ await navigator.clipboard.writeText(when); }catch(_){ ok = false; }
-      const today = dayKey(en.start)===dayKey(Date.now());
-      local[en.id] = {copied:true, msgKind:"info", msg: `Abrimos o Registrar trabalho do Jira com ${spent} preenchido. `
-        + (ok ? `A data de início (${when}) foi copiada: no Jira, clique em “⏱ Preencher data” nos favoritos, ou cole no campo Data de Início (Ctrl+A, Ctrl+V). ` : `No Jira, troque a “Data de Início” por ${when} (ou use “⏱ Preencher data” nos favoritos). `)
-        + `Salve e depois clique em “Já lancei”. Se o formulário não abrir, use a issue: ${SITE}${jiraOf(en)}`};
-      render();
-    }
-    else if(t.dataset.manualdone){
-      const en=find(t.dataset.manualdone); if(!en) return;
-      local[en.id]={};
-      try{ await myEntries().doc(en.id).update({worklog:{status:"manual",sentAt:Date.now(),spent:jiraSpent(en.end-en.start),dirty:false,error:null}}); }
-      catch(e){ local[en.id]={msg:"Não foi possível marcar: "+(e.message||e.code),msgKind:"err"}; render(); }
     }
     else if(t.dataset.resume && find(t.dataset.resume) && find(t.dataset.resume).task){
       const en=find(t.dataset.resume);
@@ -669,16 +629,16 @@
 
   /* ---------- Horas que já estavam no Jira ---------- */
   // Traz os worklogs da pessoa só nas issues que ela já lançou aqui (todas as páginas de cada issue).
-  // Quem é a pessoa no Jira: o dono do login usa a conta conectada; os outros perfis da mesma conta escolhem o próprio usuário (fica em data/users/<id>/jira_<perfil>).
+  // A pessoa no Jira é sempre a conta conectada.
   const SYNC_EVERY = 6*3600e3;
   const FATAL = ["needs_reauth","server_not_connected","server_not_found","selection_required","not_in_manifest","not_granted","capability_disabled","capability_removed","blocked_by_policy"];
-  let jiraMe = {}, syncing = null, connAcc = window.pontoApi.accountId, jwPending = null;
+  let jiraMe = {}, syncing = null, connAcc = window.pontoApi.accountId;
   const autoDone = {};
   // categorias e tarefas internas precisam ter chegado, senão o registro entra sem categoria e a tarefa vira issue solta
   let sharedOk = {tasks:false, cats:false}, sharedWait = [];
   function sharedLoaded(which){ sharedOk[which] = true; if(sharedOk.tasks && sharedOk.cats){ sharedWait.forEach(f=>f()); sharedWait = []; } }
   const sharedReady = () => (sharedOk.tasks && sharedOk.cats) ? Promise.resolve() : new Promise(r=>{ sharedWait.push(r); setTimeout(r, 8000); });
-  const myJiraDoc = () => db.doc("data/users/"+uid+"/"+docName(pid,"jira"));
+  const myJiraDoc = () => db.doc("data/users/"+uid+"/jira");
   function syncMsg(html){ $("jiraSyncMsg").innerHTML = html||""; }
   const parseJiraTime = s => Date.parse(String(s||"").replace(/([+-]\d{2})(\d{2})$/,"$1:$2"));
   function adfText(c){ if(!c) return ""; if(typeof c==="string") return c.trim(); let out=""; (function walk(n){ if(!n) return; if(typeof n.text==="string") out+=n.text; (n.content||[]).forEach(walk); })(c); return out.trim(); }
@@ -702,12 +662,12 @@
     autoDone[k] = true;
     if(Date.now()-(jiraMe.lastSync||0) > SYNC_EVERY) syncJira(false);
   }
-  async function syncJira(manual, forcePick){
+  async function syncJira(manual){
     if(!db || !uid) return;
     if(!mcp){ if(manual) syncMsg("Jira indisponível nesta visualização."); return; }
     if(syncing) return;
     syncing = "wait"; await sharedReady(); syncing = null;
-    const k = myKey(), ctx = {k, pid, manual, forcePick, col:myEntries(), jdoc:myJiraDoc(), owner:isJiraOwner(), mine:allEntries.slice(), me:Object.assign({},jiraMe)};
+    const k = myKey(), ctx = {k, manual, col:myEntries(), jdoc:myJiraDoc(), mine:allEntries.slice(), me:Object.assign({},jiraMe)};
     // issue do Jira -> lançada direto e/ou por tarefas internas
     const targets = ctx.targets = {};
     ctx.mine.forEach(e=>{ const t = jiraOf(e); if(!t) return; const o = targets[t] ||= {issue:false, tasks:new Set()}; if(e.task) o.tasks.add(e.task); else o.issue = true; });
@@ -734,7 +694,7 @@
       while(i < keys.length && !fatal){
         const key = keys[i++];
         try{ const r = await fetchWorklogs(key); if(r){ got[key] = r.list; if(r.cut) cut.push(key); } }
-        catch(e){ failed.push(key); if(e && FATAL.includes(e.code)) fatal = mcpMsg(e,false); }
+        catch(e){ failed.push(key); if(e && (e.status===401 || FATAL.includes(e.code))) fatal = mcpMsg(e,false); }
         done++; say();
       }
     }
@@ -743,72 +703,13 @@
     if(fatal){ if(myKey()===k) syncMsg(esc(fatal)); return; }
     await resolveAndApply(ctx);
   }
-  // descobre o usuário do Jira deste perfil; se não der, pergunta
   async function resolveAndApply(ctx){
-    const all = [].concat(...Object.values(ctx.got));
-    let author = "";
-    if(ctx.owner){
-      author = connAcc;
-      if(!author){ const ids = new Set(ctx.mine.filter(e=>e.worklog&&e.worklog.id).map(e=>String(e.worklog.id))); const w = all.find(w=>ids.has(String(w.id))); if(w && w.author) author = w.author.accountId; }
-      if(!author){ if(myKey()===ctx.k) syncMsg("Não consegui identificar o seu usuário no Jira."); return; }
-    } else {
-      // usuários do Jira já escolhidos por outros perfis desta conta: dois perfis com o mesmo usuário trariam as horas em dobro
-      const taken = new Set(connAcc ? [connAcc] : []);
-      // sem a conta conectada na resposta, o dono do login se reconhece pelos worklogs que esta página enviou por ele
-      let ownerList = team[uid+":"+jiraOwner];
-      if(!connAcc && !ownerList){ try{ ownerList = (await entriesCol(uid, jiraOwner).orderBy("start","desc").get()).docs.map(d=>d.data()); }catch(_){ ownerList = []; } }
-      const ownerSent = new Set((ownerList||[]).filter(e=>e.worklog && e.worklog.status==="sent" && e.worklog.id).map(e=>String(e.worklog.id)));
-      all.forEach(w=>{ if(w.author && ownerSent.has(String(w.id))) taken.add(w.author.accountId); });
-      await Promise.all(myProfiles.filter(p=>p.id!==ctx.pid).map(p=>
-        db.doc("data/users/"+uid+"/"+docName(p.id,"jira")).get().then(s=>{ const d = s.exists ? s.data() : null; if(d && d.accountId && p.id!==jiraOwner) taken.add(d.accountId); }).catch(()=>{})));
-      author = ctx.forcePick ? "" : (ctx.me.accountId||"");
-      if(author && taken.has(author)) author = ""; // é o login de outra pessoa da conta: não serve
-      if(!author && !ctx.forcePick){
-        // aprende pelos lançamentos marcados como "Já lancei": mesmo início e mesma duração no Jira
-        const found = new Set();
-        ctx.mine.filter(e=>e.end && e.worklog && e.worklog.status==="manual").forEach(e=>{
-          (ctx.got[jiraOf(e)]||[]).forEach(w=>{ const s = parseJiraTime(w.started);
-            if(w.author && !taken.has(w.author.accountId) && Math.abs(s-e.start)<=120000 && Math.abs((+w.timeSpentSeconds||0)*1000-(e.end-e.start))<=120000) found.add(w.author.accountId+"\t"+(w.author.displayName||"")); });
-        });
-        if(found.size===1){ const [id,name] = [...found][0].split("\t"); author = id; ctx.me = Object.assign({}, ctx.me, {accountId:id, name}); }
-      }
-      if(!author){
-        if(myKey()!==ctx.k) return;
-        const cnt = {};
-        all.forEach(w=>{ const a = w.author; if(!a || !a.accountId || taken.has(a.accountId)) return; (cnt[a.accountId] ||= {id:a.accountId, name:a.displayName||"Sem nome", n:0}).n++; });
-        const people = Object.values(cnt).sort((x,y)=>y.n-x.n);
-        if(!people.length){ syncMsg("Não achei registros seus no Jira nessas issues."); return; }
-        jwPending = ctx;
-        if(!ctx.manual){ syncMsg(`Para trazer suas horas do Jira, <button type="button" class="linkbtn" data-jirawho>diga quem você é no Jira</button>.`); jwPending.people = people; return; }
-        openJiraWho(people); return;
-      }
-    }
-    await applySync(ctx, author);
+    if(!connAcc){ if(myKey()===ctx.k) syncMsg("Não consegui identificar o seu usuário no Jira."); return; }
+    await applySync(ctx, connAcc);
   }
-  function openJiraWho(people){
-    $("jwPick").innerHTML = people.map(p=>`<button type="button" data-jw="${esc(p.id)}" data-jwname="${esc(p.name)}"><span class="av">${esc(p.name.trim().charAt(0).toUpperCase())}</span><span style="flex:1">${esc(p.name)}</span><small class="sub">${p.n} registro${p.n>1?"s":""}</small></button>`).join("");
-    $("jwHint").textContent = "";
-    $("jwModal").hidden = false;
-    const b = $("jwPick").querySelector("button"); b && b.focus();
-  }
-  $("jwPick").addEventListener("click", async e=>{
-    const b = e.target.closest("[data-jw]"); if(!b || !jwPending) return;
-    const ctx = jwPending; jwPending = null; $("jwModal").hidden = true;
-    if(myKey()!==ctx.k) return;
-    ctx.me = Object.assign({}, ctx.me, {accountId:b.dataset.jw, name:b.dataset.jwname});
-    await applySync(ctx, b.dataset.jw);
-  });
-  $("jwClose").onclick = ()=>{ $("jwModal").hidden = true; jwPending = null; syncMsg(""); };
-  $("jwModal").addEventListener("keydown", e=>{ if(e.key==="Escape"){ $("jwModal").hidden = true; jwPending = null; } });
   $("jiraSync").onclick = ()=>syncJira(true);
-  document.addEventListener("click", e=>{
-    const t = e.target.closest("[data-jirawho]"); if(!t) return;
-    if(jwPending && jwPending.people && jwPending.k===myKey()) openJiraWho(jwPending.people);
-    else syncJira(true, true);
-  });
-
   async function applySync(ctx, author){
-    const {col, owner, mine, targets, got} = ctx;
+    const {col, mine, targets, got} = ctx;
     const linked = new Set(mine.filter(e=>e.worklog&&e.worklog.id).map(e=>String(e.worklog.id)));
     const ids = new Set(mine.map(e=>e.id));
     // lançamentos daqui sem worklog ligado (pendentes, "Já lancei", erro): se o Jira tem o mesmo período, só liga
@@ -820,7 +721,7 @@
         const wid = String(w.id||""); if(!wid || linked.has(wid) || ids.has("jira_"+wid)) continue;
         const s = parseJiraTime(w.started), secs = +w.timeSpentSeconds||0;
         if(!s || !secs) continue;
-        const wl = {status:owner?"sent":"manual", id:wid, sentAt:parseJiraTime(w.created)||Date.now(), spent:w.timeSpent||jiraSpent(secs*1000), dirty:false, error:null};
+        const wl = {status:"sent", id:wid, sentAt:parseJiraTime(w.created)||Date.now(), spent:w.timeSpent||jiraSpent(secs*1000), dirty:false, error:null};
         try{
           const mi = free.findIndex(e=>jiraOf(e)===key && Math.abs(e.start-s)<=120000 && Math.abs((e.end-e.start)-secs*1000)<=120000);
           if(mi>=0){ const e = free.splice(mi,1)[0]; await col.doc(e.id).update({worklog:wl}); linked.add(wid); matched++; continue; }
@@ -838,98 +739,29 @@
       }
     }
     const meDoc = Object.assign({}, ctx.me, {lastSync:Date.now()});
-    if(owner){ delete meDoc.accountId; delete meDoc.name; }
+    delete meDoc.accountId; delete meDoc.name;
     try{ await ctx.jdoc.set(meDoc); }catch(_){}
     if(myKey()!==ctx.k) return;
     let msg = added||matched ? `Jira: ${added} registro${added===1?"":"s"} trazido${added===1?"":"s"}${matched?`, ${matched} ligado${matched===1?"":"s"} a lançamentos daqui`:""}.` : "Jira: nada novo.";
-    if(!owner && ctx.me.name) msg += ` Como ${esc(ctx.me.name)} · <button type="button" class="linkbtn" data-jirawho>trocar</button>.`;
     if(ctx.failed.length) msg += ` Sem resposta para ${esc(ctx.failed.join(", "))}.`;
     if(failedW) msg += ` ${failedW} não puderam ser salvos.`;
     syncMsg(msg);
   }
 
-  /* ---------- Perfis ---------- */
+  /* ---------- Conta ---------- */
   function paintProfiles(){
-    const name=window.pontoApi.displayName||"Minha conta";
-    $("profSel").innerHTML='<option value="main">'+esc(name)+'</option>';
-    $("ponto-user-name").textContent=name;
+    $("ponto-user-name").textContent = window.pontoApi.displayName || names[uid] || "Minha conta";
     paintJiraMode();
   }
   function paintJiraMode(){
-    const owner = isJiraOwner();
-    $("autoSendWrap").hidden = !owner; $("autoSend").disabled = !window.pontoApi.worklogWrites; $("autoSend").title = window.pontoApi.worklogWrites ? "Enviar ao Jira quando parar" : "Habilite o envio de horas em Conexão"; $("manualNote").hidden = owner;
+    $("autoSend").disabled = !window.pontoApi.worklogWrites; $("autoSend").title = window.pontoApi.worklogWrites ? "Enviar ao Jira quando parar" : "Habilite o envio de horas em Conexão";
   }
-  function openChooser(){
-    $("choosePick").innerHTML = myProfiles.map(pr=>{ const n = profName(uid,pr.id);
-      return `<button type="button" data-choose="${esc(pr.id)}"><span class="av">${esc((n||"?").trim().charAt(0).toUpperCase())}</span>${esc(n)}</button>`; }).join("");
-    $("chooseModal").hidden = false;
-    const b = $("choosePick").querySelector("button"); b && b.focus();
-  }
-  function openManage(focusAdd){
-    paintManage(); $("profErr").textContent = ""; $("profModal").hidden = false;
-    (focusAdd ? $("profName") : $("profClose")).focus();
-  }
-  function paintManage(){
-    $("profList").innerHTML = myProfiles.map(pr=>`<div class="prow">
-        <input type="text" value="${esc(pr.name||"")}" placeholder="${esc(pr.id==="main" ? (names[uid]||"Pessoa principal") : "Nome")}" data-pname="${esc(pr.id)}" maxlength="40" aria-label="Nome">
-        <label title="Quem é o dono do login do Jira conectado nesta conta"><input type="radio" name="jiraOwner" value="${esc(pr.id)}" ${pr.id===jiraOwner?"checked":""}> Login do Jira</label>
-        ${pr.id==="main" ? `<span></span>` : (confirmDel==="prof:"+pr.id ? `<button type="button" class="btn small danger" data-delprof="${esc(pr.id)}">Remover?</button>` : `<button type="button" class="icon" title="Remover ${esc(pr.name||"")}" data-delprof="${esc(pr.id)}">${ICON.del}</button>`)}
-      </div>`).join("");
-  }
-  async function saveProfiles(){
-    const since = (memberDocs[uid]&&memberDocs[uid].since) || Date.now();
-    try{ await db.doc("members/"+uid).set({since, profiles:myProfiles, jiraOwner}); }
-    catch(e){ $("profErr").textContent = "Não foi possível salvar: "+(e.message||e.code); }
-  }
-  function switchProfile(np){
-    if(!myProfiles.some(x=>x.id===np)) np = "main";
-    if(np===pid && mySubs.length) return;
-    pid = np; lsSet("pid", pid);
-    subscribeMine(); paintProfiles(); paintPeople(); renderReport();
-  }
-  $("profSel").addEventListener("change", ()=>{
-    const v = $("profSel").value;
-    if(v==="__newp"){ $("profSel").value = pid; openManage(true); return; }
-    if(v==="__manage"){ $("profSel").value = pid; openManage(false); return; }
-    switchProfile(v);
-  });
-  $("choosePick").addEventListener("click", e=>{ const b = e.target.closest("[data-choose]"); if(!b) return; $("chooseModal").hidden = true; switchProfile(b.dataset.choose); });
-  $("profClose").onclick = ()=>{ $("profModal").hidden = true; confirmDel = null; };
-  $("profModal").addEventListener("keydown", e=>{ if(e.key==="Escape" && !fsOpen){ $("profModal").hidden = true; confirmDel = null; } });
-  $("profAdd").addEventListener("submit", async e=>{
-    e.preventDefault(); $("profErr").textContent = "";
-    const name = $("profName").value.trim(); if(!name) return;
-    if(myProfiles.some(x=>fold(profName(uid,x.id))===fold(name))){ $("profErr").textContent = "Já existe uma pessoa com esse nome nesta conta."; return; }
-    const np = "p"+Date.now().toString(36);
-    myProfiles = myProfiles.concat([{id:np, name}]);
-    $("profName").value = "";
-    paintManage(); paintProfiles();
-    await saveProfiles();
-  });
-  $("profList").addEventListener("change", async e=>{
-    const t = e.target;
-    if(t.dataset.pname){ const v = t.value.trim(); myProfiles = myProfiles.map(x=>x.id===t.dataset.pname ? Object.assign({},x,{name:v}) : x); }
-    else if(t.name==="jiraOwner"){ jiraOwner = t.value; }
-    else return;
-    paintProfiles(); paintPeople(); render(); await saveProfiles();
-  });
-  $("profList").addEventListener("click", async e=>{
-    const b = e.target.closest("[data-delprof]"); if(!b) return;
-    const id = b.dataset.delprof;
-    if(confirmDel!=="prof:"+id){ confirmDel = "prof:"+id; paintManage(); $("profErr").textContent = "Os lançamentos dessa pessoa continuam guardados, mas somem da página."; return; }
-    confirmDel = null; $("profErr").textContent = "";
-    myProfiles = myProfiles.filter(x=>x.id!==id);
-    if(jiraOwner===id) jiraOwner = "main";
-    paintManage();
-    if(pid===id) switchProfile("main"); else paintProfiles();
-    await saveProfiles();
-  });
 
-  // assina cronômetro, lançamentos e preferências do perfil ativo
+  // assina cronômetro, lançamentos e preferências da conta
   function subscribeMine(){
     mySubs.forEach(f=>{ try{ f(); }catch(_){} }); mySubs = [];
     entries = []; allEntries = []; timer = {running:false}; settings = {autoSend:false}; editing = null;
-    jiraMe = {}; jwPending = null; $("jwModal").hidden = true; syncMsg("");
+    jiraMe = {}; syncMsg("");
     Object.keys(local).forEach(k=>delete local[k]);
     $("issueIn").value = ""; $("startIn").value = "";
     render(); paintTimer(); onIssueInput();
@@ -951,16 +783,6 @@
     mySubs.push(myJiraDoc().onSnapshot(s=>{ if(k!==myKey()) return; jiraMe = s.exists ? Object.assign({}, s.data()) : {}; if(!gotJira){ gotJira = true; if(gotEntries) autoSync(k); } }, ()=>{ gotJira = true; }));
     paintJiraMode();
   }
-
-  /* ---------- Favorito "Preencher data" (roda na aba do Jira) ---------- */
-  const BM_SRC = "(async () => {\n  const OK = /^\\d{1,2}\\/[a-zç]{3}\\/\\d{2} \\d{1,2}:\\d{2} (AM|PM)$/i;\n  let v = new URLSearchParams(location.search).get(\"startDate\") || \"\";\n  if (!OK.test(v)) { try { v = (await navigator.clipboard.readText()).trim(); } catch (e) { v = \"\"; } }\n  if (!OK.test(v)) { v = prompt(\"Data de início (ex.: 14/out/26 3:10 PM)\", v) || \"\"; }\n  if (!v) return;\n  const roots = [document, ...[...document.querySelectorAll(\"iframe\")].map(f => { try { return f.contentDocument; } catch (e) { return null; } }).filter(Boolean)];\n  let inp = null;\n  for (const d of roots) {\n    const lab = [...d.querySelectorAll(\"label\")].find(l => /data de in[ií]cio|date started|start date/i.test(l.textContent));\n    if (lab) {\n      inp = (lab.htmlFor && d.getElementById(lab.htmlFor)) || null;\n      let box = lab.parentElement;\n      for (let k = 0; !inp && box && k < 4; k++, box = box.parentElement) inp = box.querySelector(\"input:not([type=hidden]):not([type=radio]):not([type=checkbox])\");\n    }\n    inp = inp || d.querySelector('input[name=\"startDate\"], #log-work-date-logged-date-picker, input[id*=\"date-logged\"], input[id*=\"startDate\"]');\n    if (inp) break;\n  }\n  if (!inp) { alert(\"Não achei o campo Data de Início. Abra o Registrar trabalho e tente de novo.\"); return; }\n  const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(inp), \"value\").set;\n  inp.focus();\n  set.call(inp, v);\n  inp.dispatchEvent(new Event(\"input\", { bubbles: true }));\n  inp.dispatchEvent(new Event(\"change\", { bubbles: true }));\n  inp.dispatchEvent(new KeyboardEvent(\"keydown\", { key: \"Tab\", bubbles: true }));\n  inp.blur();\n  inp.style.outline = \"2px solid #0e7a5c\";\n})();";
-  const BM_URL = "javascript:" + encodeURIComponent(BM_SRC);
-  $("bmLink").setAttribute("href", BM_URL);
-  $("bmLink").addEventListener("click", e=>{ e.preventDefault(); $("bmHint").textContent = "Arraste o botão para a barra de favoritos (clicar aqui não faz nada)."; });
-  $("bmCopy").onclick = async ()=>{ try{ await navigator.clipboard.writeText(BM_URL); $("bmCopied").textContent = "Copiado."; }catch(_){ $("bmCopied").textContent = "Não deu para copiar."; } };
-  $("bmClose").onclick = ()=>{ $("bmModal").hidden = true; };
-  $("bmModal").addEventListener("keydown", e=>{ if(e.key==="Escape") $("bmModal").hidden = true; });
-  document.addEventListener("click", e=>{ if(e.target.closest("[data-bm]")){ $("bmHint").textContent = ""; $("bmModal").hidden = false; $("bmClose").focus(); } });
 
   function showBanner(text, kind){ const b=$("banner"); b.className="banner"+(kind==="err"?" err":""); b.textContent=text; b.hidden=!text; }
 
@@ -1012,8 +834,7 @@
     if(rangeCache[ck]){ const ids = new Set(list.map(e=>e.id)); return list.concat(rangeCache[ck].filter(e=>!ids.has(e.id))); }
     if(!rangeBusy[ck] && db){
       rangeBusy[ck] = true;
-      const [u,p] = k.split(":");
-      let q = entriesCol(u,p);
+      let q = entriesCol(k);
       if(a!=null) q = q.where("start",">=",a);
       if(b!=null) q = q.where("start","<",b);
       q.orderBy("start","desc").get().then(sn=>{ rangeCache[ck] = sn.docs.map(x=>Object.assign({id:x.id,_pk:k},x.data())).filter(alive); renderReport(); }).catch(()=>{});
@@ -1318,44 +1139,24 @@
     const cl = window.pontoBridge;
     if(!cl || !cl.use){ $("connState").textContent="Offline"; showBanner("Abra o Ponto pelo painel Nimitz e conecte sua conta.","err"); return; }
     const [dbNs, mcpNs, uNs] = await Promise.all([cl.use("db"), cl.use("mcp"), cl.use("user")]);
-    db = dbNs; mcp = mcpNs; userNs = uNs;
-    if(!db){ $("connState").textContent="Sem armazenamento"; showBanner("Os lançamentos não podem ser salvos nesta visualização. Entre no claude.ai com sua conta da empresa.","err"); $("days").innerHTML=""; return; }
-    uid = userNs ? await userNs.id() : null;
-    if(!uid){ $("connState").textContent="Sem usuário"; showBanner("Entre no claude.ai com sua conta da empresa para registrar suas horas.","err"); $("days").innerHTML=""; return; }
-    // entra na lista da equipe (uma vez)
-    // entra na lista da equipe (uma vez) e lê os perfis desta conta
-    try{
-      const mref = db.doc("members/"+uid); const ms = await mref.get();
-      if(!ms.exists) await mref.set({since:Date.now(), profiles:[{id:"main"}], jiraOwner:"main"});
-      else { const md = ms.data()||{}; memberDocs[uid] = md; if(Array.isArray(md.profiles) && md.profiles.length) myProfiles = md.profiles.map(x=>Object.assign({},x)); jiraOwner = md.jiraOwner||"main"; }
-    }catch(e){ showBanner("Você só tem acesso de leitura. Peça ao dono da página acesso de Colaborador para registrar suas horas.","err"); }
-    const saved = lsGet("pid");
-    pid = (saved && myProfiles.some(x=>x.id===saved)) ? saved : "main";
+    db = dbNs; mcp = mcpNs;
+    if(!db){ $("connState").textContent="Sem armazenamento"; showBanner("Os lançamentos não podem ser salvos agora. Recarregue o painel.","err"); $("days").innerHTML=""; return; }
+    uid = uNs ? await uNs.id() : null;
+    if(!uid){ $("connState").textContent="Sem usuário"; showBanner("Conecte sua conta Atlassian em Conexão para registrar suas horas.","err"); $("days").innerHTML=""; return; }
+    // a ficha em members/<conta> é criada pelo Worker com o nome do Jira
     subscribeMine(); paintProfiles();
-    if(myProfiles.length>1 && !saved) openChooser();
-    let namesAsked = "";
     db.collection("members").onSnapshot(snap=>{
       members = snap.docs.map(d=>d.id);
       if(!members.includes(uid)) members.push(uid);
-      snap.docs.forEach(d=>{ memberDocs[d.id] = d.data()||{}; });
-      const md = memberDocs[uid];
-      if(md && $("profModal").hidden){
-        if(Array.isArray(md.profiles) && md.profiles.length) myProfiles = md.profiles.map(x=>Object.assign({},x));
-        jiraOwner = md.jiraOwner||"main";
-        if(!myProfiles.some(x=>x.id===pid)) switchProfile("main");
-        paintProfiles();
-      }
+      snap.docs.forEach(d=>{ memberDocs[d.id] = d.data()||{}; if(memberDocs[d.id].name) names[d.id] = memberDocs[d.id].name; });
       members.forEach(m=>{
-        profilesOf(m).forEach(pr=>{
-          const k = m+":"+pr.id; if(teamSubs[k]) return;
-          teamSubs[k] = entriesCol(m, pr.id).orderBy("start","desc").onSnapshot(sn=>{
-            team[k] = sn.docs.map(x=>Object.assign({id:x.id,_pk:k},x.data())).filter(alive);
-            renderReport();
-          }, ()=>{});
-        });
+        if(teamSubs[m]) return;
+        teamSubs[m] = entriesCol(m).orderBy("start","desc").onSnapshot(sn=>{
+          team[m] = sn.docs.map(x=>Object.assign({id:x.id,_pk:m},x.data())).filter(alive);
+          renderReport();
+        }, ()=>{});
       });
-      const ask = members.slice().sort().join(",");
-      if(userNs && userNs.profiles && ask!==namesAsked){ namesAsked = ask; userNs.profiles(members).then(ps=>{ members.forEach(m=>{ if(ps&&ps[m]&&ps[m].name) names[m]=ps[m].name; }); paintProfiles(); paintPeople(); renderReport(); }).catch(()=>{}); }
+      paintProfiles();
       paintPeople(); renderReport();
     }, ()=>{});
     $("connState").textContent = mcp ? "Horas salvas na sua conta" : "Jira indisponível · lançamentos salvos só aqui";

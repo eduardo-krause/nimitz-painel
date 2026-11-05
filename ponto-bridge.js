@@ -1,7 +1,7 @@
 // Compatibility layer for the original Ponto UI. Persistence is owned by the Worker.
 export async function createBridge(api){
   const documents=new Map(),listeners=new Set();
-  let members={},pending=0,refreshing=null,serial=Promise.resolve();
+  let pending=0,refreshing=null,serial=Promise.resolve();
   const clone=value=>structuredClone(value);
   const docSnapshot=path=>({id:path.split('/').at(-1),exists:documents.has(path),data:()=>clone(documents.get(path)?.data)});
   function snapshot(spec){
@@ -13,8 +13,6 @@ export async function createBridge(api){
     return {docs:rows};
   }
   function notify(force=false){
-    members={};
-    documents.forEach((row,path)=>{if(path.startsWith('members/')) members[path.slice(8)]={name:row.data.name};});
     for(const listener of [...listeners]){
       const snap=snapshot(listener.spec);
       const signature=JSON.stringify(snap.docs?snap.docs.map(d=>[d.id,d.data()]):[snap.exists,snap.data()]);
@@ -88,6 +86,6 @@ export async function createBridge(api){
     }
     throw new Error('Operação não disponível nesta integração.');
   }};
-  const user={id:async()=>encodeURIComponent(api.accountId),profiles:async()=>clone(members)};
+  const user={id:async()=>encodeURIComponent(api.accountId)};
   return {use:async name=>({db,mcp,user}[name]),refresh};
 }

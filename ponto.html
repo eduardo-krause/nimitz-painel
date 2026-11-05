@@ -175,7 +175,6 @@ aside{display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(env(s
 a.pill{text-decoration:none;display:inline-block}
 .linkbtn{border:0;background:none;padding:0;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer}
 .bmrow{display:flex;justify-content:center;padding:6px 0}
-#bmLink{font-size:15px;padding:10px 18px;cursor:grab;text-decoration:none}
 .modal-card details summary{cursor:pointer;color:var(--muted);font-size:13px}
 .modal-card details p{margin-top:8px}
 /* abas e relatório */
@@ -313,7 +312,7 @@ input[list]::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
       <button id="tabReport" aria-pressed="false">Relatório</button>
     </div>
     <div class="who">
-      <div>Registrando como <strong id="ponto-user-name">…</strong></div><select id="profSel" hidden><option value="main">…</option></select>
+      <div>Registrando como <strong id="ponto-user-name">…</strong></div>
       <div class="sub" id="connState">Conectando…</div>
       <div id="whoAmI" hidden></div>
     </div>
@@ -359,8 +358,7 @@ input[list]::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
     <button class="btn small" id="jiraSync" title="Busca suas horas no Jira na semana selecionada e nas tarefas já usadas aqui">Buscar horas do Jira</button>
     <span class="sub" id="jiraSyncMsg" aria-live="polite"></span>
     <div class="total">
-      <label class="toggle" id="autoSendWrap"><input type="checkbox" id="autoSend"> Enviar ao Jira ao parar</label>
-      <span class="sub" id="manualNote" hidden title="O login do Jira desta conta é de outra pessoa. Use “Lançar no Jira” em cada lançamento.">Seu perfil lança no Jira manualmente · <button type="button" class="linkbtn" data-bm>preencher data sozinho</button></span>
+      <label class="toggle"><input type="checkbox" id="autoSend"> Enviar ao Jira ao parar</label>
       <button class="btn small" id="sendAll" hidden>Enviar pendentes</button>
       <span class="sub">Total da semana</span><span class="big" id="wkTotal">0h 00m</span>
     </div>
@@ -436,45 +434,11 @@ input[list]::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
 
 </div>
 
-<div class="modal" id="chooseModal" hidden>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="chooseTitle">
-    <h2 id="chooseTitle">Quem está usando?</h2>
-    <p>Esta conta do Claude é usada por mais de uma pessoa. Escolha quem vai registrar horas neste navegador.</p>
-    <div class="pick" id="choosePick"></div>
-  </div>
-</div>
-<div class="modal" id="bmModal" hidden>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bmTitle">
-    <h2 id="bmTitle">Preencher a data no Jira</h2>
-    <p><b>Instale uma vez:</b> arraste o botão abaixo para a barra de favoritos do navegador. Se a barra não aparece, use Ctrl+Shift+B.</p>
-    <div class="bmrow"><a id="bmLink" class="btn primary" href="#" title="Arraste para a barra de favoritos">⏱ Preencher data</a></div>
-    <p><b>No dia a dia:</b> clique em “Lançar no Jira” e, com o Registrar trabalho aberto, clique em <b>⏱ Preencher data</b> na barra de favoritos. A Data de Início fica igual à do lançamento; é só salvar. Na primeira vez o navegador pode pedir para ler a área de transferência: permita.</p>
-    <details><summary>Não consegue arrastar?</summary><p>Crie um favorito qualquer, edite e cole este código no campo URL.</p><button class="btn small" id="bmCopy" type="button">Copiar código</button> <span class="sub" id="bmCopied"></span></details>
-    <div class="foot"><span class="sub" id="bmHint"></span><button class="btn" id="bmClose" type="button">Fechar</button></div>
-  </div>
-</div>
-<div class="modal" id="profModal" hidden>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="profTitle">
-    <h2 id="profTitle">Pessoas nesta conta</h2>
-    <p>Cada pessoa tem o próprio cronômetro e os próprios lançamentos. Só quem é dono do login do Jira desta conta envia worklog automático; as outras lançam no Jira manualmente.</p>
-    <div class="plist" id="profList"></div>
-    <form class="padd" id="profAdd"><input id="profName" placeholder="Nome da pessoa" maxlength="40" aria-label="Nome da nova pessoa"><button class="btn small primary">Adicionar</button></form>
-    <div class="foot"><span class="err" id="profErr"></span><button class="btn" id="profClose" type="button">Fechar</button></div>
-  </div>
-</div>
-<div class="modal" id="jwModal" hidden>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="jwTitle">
-    <h2 id="jwTitle">Quem é você no Jira?</h2>
-    <p id="jwText">O login do Jira desta conta é de outra pessoa. Escolha o seu usuário para trazer só os seus registros. Aparecem as pessoas que lançaram horas nas issues que você já usou aqui.</p>
-    <div class="pick" id="jwPick"></div>
-    <div class="foot"><span class="sub" id="jwHint"></span><button class="btn" id="jwClose" type="button">Cancelar</button></div>
-  </div>
-</div>
 
 <style>
 :root {--accent:#177b80;--f-display:"Segoe UI",system-ui,sans-serif;--f-body:"Segoe UI",system-ui,sans-serif;--f-mono:Consolas,monospace}
 .wrap{max-width:none;padding:20px 24px 40px}.top h1{font-size:22px;color:#17353e}.top .who{font-size:12px}
-.timer{border-radius:12px}.timer.running{border-color:#177b80}.fs:has(#profSel){display:none!important}
+.timer{border-radius:12px}.timer.running{border-color:#177b80}
 @media(max-width:650px){.wrap{padding:14px 12px 32px}}
 </style><script type="module" src="./ponto-boot.js"></script>
 </body></html>
