@@ -1810,7 +1810,7 @@ var el = {};
 function montarShell(){
   document.getElementById("app").innerHTML =
     '<header class="topbar">'
-  +   '<div class="brand"><img src="./logo.svg" width="36" height="36" alt="Nimitz" style="flex:none">'
+  +   '<div class="brand"><img src="./filt-logo.png" width="60" height="48" alt="Filt" style="flex:none;object-fit:contain;border-radius:6px;background:#000">'
   +     '<span class="brand-txt"><b>Versões Nimitz</b><span>Controle de release</span></span></div>'
   +   '<nav class="abas">'
   +     '<button class="aba-btn on" data-aba="tarefas">'+icon("table",14)+' Tarefas</button>'
