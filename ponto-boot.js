@@ -1,4 +1,4 @@
-import {createBridge} from './ponto-bridge.js?v=20261105c';
+import {createBridge} from './ponto-bridge.js?v=20261105d';
 const api=window.parent!==window?window.parent.nimitz:null;
 // O Ponto segue o tema do painel (o painel usa o do sistema, ou data-theme se definido).
 function followPanelTheme(){
@@ -10,15 +10,22 @@ function followPanelTheme(){
 }
 followPanelTheme();
 try{window.parent.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',followPanelTheme);}catch{}
+// Troca o conteúdo por um aviso sem apagar os estilos (eles ficam dentro do body).
+function showOnly(content){
+  document.querySelectorAll('body > :not(style):not(script)').forEach(node=>node.remove());
+  const box=document.createElement('div');box.className='ponto-aviso';
+  if(typeof content==='string') box.innerHTML=content; else box.append(content);
+  document.body.append(box);
+}
 if(!api?.connected||api.preview){
-  document.body.innerHTML='<div style="padding:32px;font:15px system-ui;color:#354858"><h2>Seu ponto de trabalho</h2><p>Conecte sua conta Atlassian no botão Conexão do painel para registrar suas horas.</p></div>';
+  showOnly('<div class="rotulo-ponto">Ponto das Tarefas</div><p>Conecte sua conta Atlassian no botão <b>Conexão</b> do painel para registrar suas horas.</p>');
 }else{
   try{
     window.pontoBridge=await createBridge(api);
     window.pontoApi=api;
-    await import('./ponto-app.js?v=20261105c');
+    await import('./ponto-app.js?v=20261105d');
   }catch(error){
-    const message=document.createElement('p');message.textContent='Não foi possível abrir o Ponto: '+error.message;
-    message.style.cssText='padding:24px;color:#a22;font:15px system-ui';document.body.replaceChildren(message);
+    const message=document.createElement('p');message.className='ponto-erro';message.textContent='Não foi possível abrir o Ponto: '+error.message;
+    showOnly(message);
   }
 }
