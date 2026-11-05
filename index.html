@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/svg+xml" href="./logo.svg">
+<meta name="theme-color" content="#073e42">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Versões Nimitz</title>
+</head>
+<body>
+<button id="connection-open" class="btn" type="button" title="Configurar conexão com o Jira" hidden>Conexão</button>
+<dialog id="connection-dialog" style="width:min(520px,90vw);border:1px solid #acc;border-radius:12px;padding:24px;font:15px system-ui">
+<form id="connection-form">
+<h2 style="margin-top:0">Conectar ao Jira</h2>
+<p id="connection-status" role="status" style="padding:12px;background:#eef6f6;border-radius:6px">Iniciando…</p>
+<p id="connection-help">Entre com seu e-mail e token Atlassian.</p>
+<div id="remote-fields">
+<label>Endereço do backend<input id="backend-url" type="url" placeholder="https://nimitz-jira-api.sua-conta.workers.dev" style="display:block;width:100%;box-sizing:border-box;margin:6px 0 14px;padding:9px"></label>
+</div>
+<div id="local-fields" hidden>
+<label>E-mail da conta Atlassian<input id="jira-email" type="email" autocomplete="username" style="display:block;width:100%;box-sizing:border-box;margin:6px 0 14px;padding:9px"></label>
+<label>Token da API do Jira<input id="jira-token" type="password" autocomplete="off" style="display:block;width:100%;box-sizing:border-box;margin:6px 0 14px;padding:9px"></label>
+<label style="display:block;margin-bottom:12px"><input id="jira-scoped" type="checkbox"> Token com escopos (scoped)</label>
+<label style="display:block;margin-bottom:12px"><input id="jira-writes" type="checkbox"> Permitir alterar versões corrigidas no Jira</label>
+<p style="font-size:13px">Seu token fica na sessão desta aba e é enviado ao backend para autenticar os pedidos no Jira. Não é salvo no servidor. Use Sair e limpar dados ao terminar.</p>
+</div>
+<p id="connection-error" role="alert" style="color:#a22"></p>
+<button id="connection-clear" class="btn" type="button" style="margin-bottom:16px">Sair e limpar dados</button>
+<div style="display:flex;gap:10px;justify-content:flex-end"><button id="connection-close" type="button">Cancelar</button><button id="connection-submit" type="submit">Testar e conectar</button></div>
+</form></dialog>
+<title>Versões Nimitz</title>
+<style>
+/* ============================================================
+   Tokens — mesma família visual do Painel de Tarefas (teal + laranja,
+   neutros frios), escala de tipo 10/11/12/13/15, grade de 4px.
+
+   Cores das FASES: as 7 fases são ordinais, mas a ORDEM já é carregada pela
+   POSIÇÃO em todo lugar onde essas cores aparecem — os tiles e os segmentos da
+   trilha saem na ordem de FASES, e os status ordenam pelo índice da fase. Então
+   o canal de cor não precisa gastar-se repetindo a ordem: pode trabalhar para a
+   IDENTIDADE, que é a pergunta real na etiqueta de uma tarefa ("qual status é
+   este?").
+   Era uma rampa de um só matiz (teal, só a luminosidade variando). Lia a ordem
+   bem e a identidade mal: o pior par adjacente ficava em ΔE 7,4 (OKLab ×100),
+   abaixo do piso de 15 — "difícil de distinguir mesmo com visão de cores plena".
+   Agora a rampa GIRA O MATIZ ao longo da progressão (ciano → azul → violeta →
+   magenta) mantendo a luminosidade monótona: a luminosidade preserva a leitura
+   ordinal e sobrevive à daltonia, que preserva luminância; o matiz faz a
+   separação para visão plena. Medido: ΔE 12,9 no claro e 10,1 no escuro.
+   O piso de 15 não é alcançável aqui, e isso foi medido, não estimado: 5 fases
+   em voo mais vermelho e verde não caem em ΔE 15 mútuo sem invadir a vizinhança
+   do vermelho e do verde — o que poria verde em "Pendente" e laranja em "Merge"
+   num painel onde verde significa concluído e vermelho, reprovado. O teto no
+   semicírculo frio é ΔE 12,9.
+   Por isso a identidade NÃO depende de cor: cada fase tem seu próprio ícone, na
+   etiqueta e no tile. Com a forma carregando o significado junto com a cor, o
+   piso deixa de ser o gargalo.
+   Finalizada e Reprovada seguem fora da rampa, com as cores de status
+   (bom / crítico) e seus ícones de sempre.
+   No modo escuro a rampa inverte o sentido (o mais avançado fica mais
+   claro), que é como uma rampa se ancora sobre fundo escuro.
+   ============================================================ */
+:root{
+  --accent-1:#0891a8; --accent-2:#ff7a3d;
+  --bg:#eef1f5; --surface:#ffffff; --surface-2:#f4f6f9; --surface-3:#e7ebf0;
+  --border:#dde3ea; --border-strong:#c1cad5;
+  --text:#10161d; --text-muted:#3f4c59; --text-faint:#64748b;
+  --danger:#d6284a; --danger-bg:#fdeef1; --danger-border:#f6c9d3;
+  --success:#0f8f6c; --success-bg:#e8faf3; --success-border:#a8e6cf;
+  --info-bg:#eaf6fb; --info-border:#bfe3f0; --info-text:#0c6e8c;
+  --warn-bg:#fff4e8; --warn-border:#fad9ab; --warn-text:#9a5b12;
+  --shadow: 0 1px 2px rgba(16,22,29,.07), 0 1px 1px rgba(16,22,29,.04);
+  --shadow-card: 0 8px 30px rgba(16,22,29,.10);
+  --shadow-pop: 0 14px 40px rgba(16,22,29,.20);
+  --focus:#0891a8;
+  color-scheme: light;
+
+  --fase-pendente:#00c5b4;
+  --fase-dev:#00a0d5;
+  --fase-merge:#2a71d6;
+  --fase-teste:#6642b2;
+  --fase-prod:#760f72;
+  --fase-reprovada:#d6284a;
+  --fase-final:#0f8f6c;
+  --fase-outro:#94a3b8;
+
+  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,"Liberation Mono",monospace;
+  --fs-label:10px; --fs-xs:11px; --fs-sm:12px; --fs-md:13px; --fs-lg:15px; --fs-xl:22px;
+  --track-label:.08em;
+
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
+  --r-sm:6px; --r-md:8px; --r-lg:12px; --r-full:999px;
+  --ctrl-h:30px; --ctrl-h-sm:26px; --head-h:32px;
+  --gutter:var(--sp-4);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --accent-1:#22d3ee; --accent-2:#ffab6b;
+    --bg:#0a121a; --surface:#111b25; --surface-2:#152230; --surface-3:#1b2c3c;
+    --border:#213445; --border-strong:#2c4457;
+    --text:#e9f1f6; --text-muted:#a3b4c2; --text-faint:#7c93a6;
+    --danger:#ff7590; --danger-bg:#2c1420; --danger-border:#4a1f2f;
+    --success:#3ee6b4; --success-bg:#0d241d; --success-border:#1a3d31;
+    --info-bg:#0d2836; --info-border:#1a4256; --info-text:#7fd4ec;
+    --warn-bg:#2a1f0f; --warn-border:#4a3818; --warn-text:#f0b355;
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 1px 1px rgba(0,0,0,.30);
+    --shadow-card: 0 8px 30px rgba(0,0,0,.45);
+    --shadow-pop: 0 14px 40px rgba(0,0,0,.55);
+    --focus:#22d3ee;
+    color-scheme: dark;
+    --fase-pendente:#007197;
+    --fase-dev:#0081d5;
+    --fase-merge:#708fff;
+    --fase-teste:#c59dff;
+    --fase-prod:#ffaeff;
+    --fase-reprovada:#ff7590;
+    --fase-final:#3ee6b4;
+    --fase-outro:#7c93a6;
+  }
+}
+:root[data-theme="dark"]{
+  --accent-1:#22d3ee; --accent-2:#ffab6b;
+  --bg:#0a121a; --surface:#111b25; --surface-2:#152230; --surface-3:#1b2c3c;
+  --border:#213445; --border-strong:#2c4457;
+  --text:#e9f1f6; --text-muted:#a3b4c2; --text-faint:#7c93a6;
+  --danger:#ff7590; --danger-bg:#2c1420; --danger-border:#4a1f2f;
+  --success:#3ee6b4; --success-bg:#0d241d; --success-border:#1a3d31;
+  --info-bg:#0d2836; --info-border:#1a4256; --info-text:#7fd4ec;
+  --warn-bg:#2a1f0f; --warn-border:#4a3818; --warn-text:#f0b355;
+  --shadow: 0 1px 2px rgba(0,0,0,.45), 0 1px 1px rgba(0,0,0,.30);
+  --shadow-card: 0 8px 30px rgba(0,0,0,.45);
+  --shadow-pop: 0 14px 40px rgba(0,0,0,.55);
+  --focus:#22d3ee;
+  color-scheme: dark;
+  --fase-pendente:#007197;
+  --fase-dev:#0081d5;
+  --fase-merge:#708fff;
+  --fase-teste:#c59dff;
+  --fase-prod:#ffaeff;
+  --fase-reprovada:#ff7590;
+  --fase-final:#3ee6b4;
+  --fase-outro:#7c93a6;
+}
+:root[data-theme="light"]{
+  --accent-1:#0891a8; --accent-2:#ff7a3d;
+  --bg:#eef1f5; --surface:#ffffff; --surface-2:#f4f6f9; --surface-3:#e7ebf0;
+  --border:#dde3ea; --border-strong:#c1cad5;
+  --text:#10161d; --text-muted:#3f4c59; --text-faint:#64748b;
+  --danger:#d6284a; --danger-bg:#fdeef1; --danger-border:#f6c9d3;
+  --success:#0f8f6c; --success-bg:#e8faf3; --success-border:#a8e6cf;
+  --info-bg:#eaf6fb; --info-border:#bfe3f0; --info-text:#0c6e8c;
+  --warn-bg:#fff4e8; --warn-border:#fad9ab; --warn-text:#9a5b12;
+  --shadow: 0 1px 2px rgba(16,22,29,.07), 0 1px 1px rgba(16,22,29,.04);
+  --shadow-card: 0 8px 30px rgba(16,22,29,.10);
+  --shadow-pop: 0 14px 40px rgba(16,22,29,.20);
+  --focus:#0891a8;
+  color-scheme: light;
+  --fase-pendente:#00c5b4;
+  --fase-dev:#00a0d5;
+  --fase-merge:#2a71d6;
+  --fase-teste:#6642b2;
+  --fase-prod:#760f72;
+  --fase-reprovada:#d6284a;
+  --fase-final:#0f8f6c;
+  --fase-outro:#94a3b8;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-ui); font-size:var(--fs-sm);
+  font-variant-numeric:tabular-nums; overflow:hidden;
+}
+.mono{font-family:var(--font-mono);}
+.app-shell{height:100vh;padding:var(--sp-3) var(--sp-3) var(--sp-6);display:flex;flex-direction:column;}
+.app-card{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-card);overflow:hidden;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:var(--r-full);border:2px solid var(--surface);}
+::-webkit-scrollbar-thumb:hover{background:var(--text-faint);}
+button{font:inherit;color:inherit;}
+input,select,button{font-family:inherit;}
+:focus-visible{outline:2px solid var(--focus);outline-offset:1px;}
+svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.spin{animation:spin 1s linear infinite;transform-box:view-box;transform-origin:center;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion: reduce){ .spin{animation:none;} *{transition:none !important;animation-duration:.001ms !important;} }
+/* Com movimento reduzido a barra some na hora — e sumirAviso() também pula a
+   espera, senão a mensagem ficaria 280ms parada e opaca antes de desaparecer. */
+
+.rotulo{font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);color:var(--text-faint);}
+
+/* topo */
+.topbar{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--gutter);
+  border-bottom:1px solid var(--border);flex:none;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:var(--sp-2);}
+.brand-mark{width:32px;height:32px;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;
+  color:#fff;background:linear-gradient(140deg,var(--accent-1),var(--accent-2));box-shadow:var(--shadow);}
+.brand-mark svg{width:18px;height:18px;stroke:#fff;stroke-width:2;}
+.brand-txt b{display:block;font-size:var(--fs-lg);font-weight:700;letter-spacing:-.01em;}
+.brand-txt span{display:block;font-size:var(--fs-xs);color:var(--text-faint);}
+.campo-versao{display:flex;align-items:center;gap:var(--sp-2);}
+.campo-versao input{border:1px solid var(--border);background:var(--surface);border-radius:var(--r-md);
+  padding:0 var(--sp-3);height:var(--ctrl-h);font-size:var(--fs-sm);color:var(--text);outline:0;
+  width:200px;font-family:var(--font-mono);}
+.campo-versao input:focus{border-color:var(--focus);}
+.btn{display:inline-flex;align-items:center;gap:var(--sp-2);white-space:nowrap;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-muted);border-radius:var(--r-md);padding:0 var(--sp-3);
+  height:var(--ctrl-h);font-size:var(--fs-sm);font-weight:600;cursor:pointer;box-shadow:var(--shadow);}
+.btn:hover{border-color:var(--border-strong);color:var(--text);}
+.btn:disabled{opacity:.5;cursor:default;}
+.btn-primary{background:var(--text);color:var(--surface);border-color:var(--text);font-weight:700;}
+.btn-primary:hover{opacity:.88;color:var(--surface);}
+.btn-on{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text);}
+/* Chave Manual/Auto da replicação. Segmentado, e não um interruptor: os dois
+   modos ficam escritos na tela, então dá para saber em qual se está sem clicar
+   em nada. Sem ícone de propósito — o cabeçalho já tem ícone em tudo, e aqui é
+   a palavra que precisa ser lida. */
+.seg{display:inline-flex;align-items:center;gap:var(--sp-2);}
+.seg-lab{font-size:var(--fs-label);font-weight:700;text-transform:uppercase;
+  letter-spacing:var(--track-label);color:var(--text-faint);}
+.seg-cx{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-md);
+  background:var(--surface);box-shadow:var(--shadow);overflow:hidden;}
+.seg-cx button{border:0;background:transparent;color:var(--text-faint);height:var(--ctrl-h);
+  padding:0 var(--sp-3);font-family:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;}
+.seg-cx button + button{border-left:1px solid var(--border);}
+.seg-cx button:hover{color:var(--text);}
+.seg-cx button.on{background:var(--text);color:var(--surface);cursor:default;}
+.topo-stats{margin-left:auto;display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-xs);
+  color:var(--text-faint);white-space:nowrap;}
+.topo-stats b{color:var(--text);font-size:var(--fs-md);font-weight:700;}
+
+/* barra de aviso */
+/* A saída é animada, a entrada não. Sumir de uma vez fazia a página inteira dar
+   um salto para cima: a barra é flex:none numa coluna, então a altura dela sai
+   do fluxo num quadro só. Encolhendo junto com o fade, o conteúdo sobe
+   acompanhando. Aparecer, ao contrário, precisa ser imediato — é resposta a um
+   clique, e atrasá-la faria o painel parecer lento.
+   O overflow:hidden é o que permite animar a altura sem a mensagem vazar. */
+.statusbar{display:flex;align-items:flex-start;gap:var(--sp-2);padding:var(--sp-2) var(--gutter);
+  font-size:var(--fs-sm);border-bottom:1px solid;flex:none;overflow:hidden;
+  transition:opacity .28s ease, max-height .28s ease, padding-top .28s ease,
+             padding-bottom .28s ease, border-bottom-width .28s ease;}
+.statusbar.saindo{opacity:0;max-height:0 !important;padding-top:0;padding-bottom:0;
+  border-bottom-width:0;}
+.statusbar.info{background:var(--info-bg);border-color:var(--info-border);color:var(--info-text);}
+.statusbar.warn{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text);}
+.statusbar.ok{background:var(--success-bg);border-color:var(--success-border);color:var(--success);}
+.statusbar.err{background:var(--danger-bg);border-color:var(--danger-border);color:var(--danger);}
+.statusbar .msg{flex:1;word-break:break-word;line-height:1.5;}
+.statusbar .x{margin-left:auto;border:0;background:transparent;color:inherit;cursor:pointer;
+  border-radius:var(--r-sm);padding:2px;}
+.statusbar .x:hover{background:color-mix(in srgb, currentColor 14%, transparent);}
+
+/* faixa de resumo */
+.resumo{display:flex;flex-wrap:wrap;align-items:stretch;gap:var(--sp-3);padding:var(--sp-4) var(--gutter);
+  border-bottom:1px solid var(--border);background:var(--surface-2);flex:none;}
+.progresso-bloco{display:flex;flex-direction:column;gap:var(--sp-2);min-width:230px;}
+.progresso-num{display:flex;align-items:baseline;gap:var(--sp-2);}
+.progresso-num b{font-size:var(--fs-xl);font-weight:700;line-height:1;letter-spacing:-.02em;}
+.progresso-num span{font-size:var(--fs-xs);color:var(--text-faint);}
+.trilha{height:8px;border-radius:var(--r-full);background:var(--surface-3);overflow:hidden;display:flex;}
+/* A da Checklist tem largura fixa; a do resumo estica na coluna. */
+.trilha.estreita{width:150px;}
+.trilha-cheia{flex:none;height:100%;border-radius:var(--r-full);background:var(--success);
+  transition:width .4s, background-color .4s;}
+.trilha-txt{font-size:var(--fs-xs);color:var(--text-faint);}
+.trilha-txt b{color:var(--text);font-weight:700;}
+/* 2px de respiro entre segmentos: separa fases adjacentes sem inventar borda colorida */
+.trilha i{display:block;height:100%;border-right:2px solid var(--surface-2);}
+.trilha i:last-child{border-right:0;}
+.tiles{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-left:auto;}
+.tile{display:flex;align-items:center;gap:var(--sp-2);border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);min-width:118px;cursor:pointer;text-align:left;
+  box-shadow:var(--shadow);}
+.tile:hover{border-color:var(--border-strong);}
+.tile.on{border-color:var(--text);box-shadow:0 0 0 1px var(--text);}
+.tile .marca{width:4px;align-self:stretch;border-radius:var(--r-full);flex:none;}
+.tile .corpo{display:flex;flex-direction:column;gap:1px;min-width:0;}
+.tile .n{font-size:var(--fs-md);font-weight:700;line-height:1.1;}
+.tile .n em{font-style:normal;font-size:var(--fs-xs);font-weight:600;color:var(--text-faint);margin-left:3px;}
+.tile .lab{font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);
+  color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* Respiro entre o ícone da fase e o rótulo. Fica em margem, e não em flex+gap,
+   porque .lab depende de text-overflow:ellipsis para truncar — e ellipsis não
+   se aplica ao nó de texto solto que o flex criaria. */
+.tile .lab svg.icon{margin-right:3px;vertical-align:-2px;}
+.tile svg.icon{width:12px;height:12px;}
+
+/* toolbar */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--gutter);
+  border-bottom:1px solid var(--border);flex:none;}
+.busca{display:flex;align-items:center;gap:var(--sp-2);background:var(--surface-3);border-radius:var(--r-md);
+  padding:0 var(--sp-3);height:var(--ctrl-h);}
+.busca:focus-within{background:var(--surface);box-shadow:0 0 0 2px color-mix(in srgb, var(--focus) 35%, transparent);}
+.busca svg{color:var(--text-faint);}
+.busca input{border:0;background:transparent;outline:0;font-size:var(--fs-sm);color:var(--text);width:200px;}
+.busca input::placeholder{color:var(--text-faint);}
+.sel-inline{border:1px solid var(--border);background:var(--surface);border-radius:var(--r-md);
+  padding:0 var(--sp-2);height:var(--ctrl-h);font-size:var(--fs-sm);color:var(--text-muted);cursor:pointer;max-width:190px;}
+.toolbar-dir{margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--text-faint);}
+/* Sem isto o select encolhe e corta o rotulo da ordenacao. */
+.toolbar-dir .sel-inline{flex:none;}
+/* Contador ao lado do rotulo de um botao de filtro. Vazio, some — senao a
+   pilula cinza aparece sem numero dentro. */
+.contador{background:var(--surface-3);border-radius:var(--r-sm);padding:1px var(--sp-2);font-family:var(--font-mono);
+  font-size:var(--fs-label);color:var(--text-muted);}
+.contador:empty{display:none;}
+
+/* tabela */
+.tabela-scroll{flex:1;min-height:0;overflow:auto;}
+/* table-layout:fixed é o que impede a coluna de se redimensionar conforme a
+   linha que entra na tela. Com a virtualização, só as linhas visíveis estão no
+   DOM: no layout automático o navegador media o conteúdo DELAS para dimensionar
+   as colunas, então rolar trocava as larguras a cada janela. Agora a largura vem
+   do <colgroup> e do nada mais.
+   Pegadinha da especificação: table-layout:fixed NÃO TEM EFEITO com width:auto —
+   o algoritmo fixo exige largura definida, e sem ela o navegador volta ao
+   automático (foi o que aconteceu na primeira tentativa: a tabela mediu 1915px
+   em vez dos 1492px declarados). Por isso cabecalho() escreve a largura em px,
+   a soma das colunas visíveis, junto com o colgroup.
+   min-width:100% cobre o caso oposto: viewport mais largo que a soma, onde a
+   tabela preenche em vez de deixar um vão à direita — as colunas então dividem
+   a sobra proporcionalmente, o que continua estável ao rolar. */
+table{table-layout:fixed;min-width:100%;border-collapse:separate;border-spacing:0;
+  font-size:var(--fs-sm);}
+thead th{position:sticky;top:0;padding:0;background:var(--surface-2);z-index:20;text-align:left;
+  vertical-align:bottom;}
+/* A linha de filtros gruda logo abaixo da de títulos, e só ela leva a borda:
+   duas bordas empilhadas comem o respiro entre cabeçalho e primeira linha. */
+thead tr:nth-child(2) th{top:var(--head-h);background:var(--surface);
+  border-bottom:1px solid var(--border);z-index:19;}
+.th-filter{padding:var(--sp-2) var(--sp-2);}
+.th-filter select,.th-filter input,.th-filter button{width:100%;border:0;border-radius:var(--r-sm);
+  padding:0 var(--sp-2);height:var(--ctrl-h-sm);font-size:var(--fs-xs);background:var(--surface-3);
+  color:var(--text-muted);outline:0;cursor:pointer;text-align:left;font-family:inherit;}
+.th-filter input{cursor:text;}
+.th-filter input::placeholder{color:var(--text-faint);}
+.th-filter .ativo,.th-filter select.ativo,.th-filter input.ativo,.th-filter button.ativo{
+  background:var(--warn-bg);color:var(--warn-text);font-weight:600;}
+.th-filter select:focus,.th-filter input:focus{box-shadow:0 0 0 2px color-mix(in srgb, var(--focus) 35%, transparent);}
+.pop-acoes{display:flex;gap:var(--sp-1);padding:var(--sp-2);border-bottom:1px solid var(--border);}
+.pop-acoes button{border:0;background:transparent;color:var(--text-muted);font-size:var(--fs-xs);
+  padding:var(--sp-1) var(--sp-2);border-radius:var(--r-sm);cursor:pointer;}
+.pop-acoes button:hover{background:var(--surface-3);}
+.captura{position:fixed;inset:0;z-index:30;}
+.th-btn{display:flex;align-items:center;gap:var(--sp-1);width:100%;height:var(--head-h);border:0;
+  background:transparent;padding:0 var(--sp-3);cursor:pointer;text-align:left;
+  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);
+  color:var(--text-faint);overflow:hidden;}
+/* O rótulo vai em span próprio porque ellipsis não se aplica a nó de texto solto
+   dentro de um flex; a seta de ordenação fica de fora do truncamento. */
+.th-btn .th-lab{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.th-btn:hover{color:var(--text);}
+.th-btn.on{color:var(--text);}
+.th-btn svg.seta{color:var(--accent-2);}
+/* Truncar é obrigatório aqui, não estético: no layout fixo o conteúdo que não
+   cabe QUEBRA em duas linhas, e medirAlturaLinha() mede uma altura só e a repete
+   nos espaçadores da virtualização — uma linha mais alta que as outras desalinha
+   a janela inteira. Antes só 6 colunas truncavam (.corta) porque o layout
+   automático alargava as demais. */
+tbody td{border-bottom:1px solid var(--border);background:var(--surface);padding:var(--sp-2) var(--sp-3);
+  vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+tbody tr:hover td{background:var(--surface-2);}
+.cel-faint{color:var(--text-faint);}
+.cel-mono{font-family:var(--font-mono);font-size:var(--fs-xs);}
+/* max-width:0 era o truque para o ellipsis funcionar no layout automático; no
+   fixo a largura já vem do colgroup, e mantê-lo só confundiria. O truncamento em
+   si agora está em tbody td, para todas as colunas. */
+.corta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chave{display:inline-flex;align-items:center;gap:var(--sp-1);font-family:var(--font-mono);font-size:var(--fs-xs);
+  font-weight:700;color:var(--text-muted);text-decoration:none;}
+.chave:hover{color:var(--accent-2);}
+.chave svg{width:10px;height:10px;opacity:0;}
+tr:hover .chave svg{opacity:.6;}
+/* Etiqueta de status, uma só para as três abas: a cor vem da FASE (não de
+   hash) e o fundo é um tint dela, sempre com o texto ao lado. Quem monta é
+   etiquetaStatus() — ninguém escreve a marcação na mão. */
+.etiqueta{display:inline-flex;max-width:100%;align-items:center;gap:var(--sp-2);border-radius:var(--r-full);
+  border:1px solid var(--border);background:var(--surface-2);padding:3px var(--sp-2);font-size:var(--fs-xs);
+  font-weight:600;line-height:1.3;color:var(--text-muted);}
+.etiqueta .ponto{width:7px;height:7px;border-radius:var(--r-full);flex:none;}
+/* A marca da fase ocupa a vaga do ponto: mesma função de "marca colorida ao
+   lado do rótulo", mas a forma também identifica a fase. */
+.etiqueta .marca-fase{display:inline-flex;align-items:center;flex:none;}
+.etiqueta .marca-fase svg.icon{width:12px;height:12px;}
+.etiqueta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.venceu{color:var(--danger);font-weight:700;}
+/* Risco de prazo medido contra a SUBIDA SEMANAL, não contra "hoje". Numa
+   release de toda segunda a pergunta não é "está atrasada?", é "cabe em qual
+   versão?" — e são duas respostas ruins diferentes:
+     .prazo-estourado (vermelho) — vence ANTES da versão subir: nem entrando
+       nesta dá tempo. Absorve o "já venceu", que é o caso extremo disto.
+     .prazo-semana (âmbar) — ainda cabe nesta versão, mas não aguenta a
+       próxima: ou vai agora, ou estoura.
+   Prazo com folga fica NEUTRO de propósito: pintar os três estados gastaria o
+   canal de cor com o único caso que não pede ação. */
+.prazo-estourado{color:var(--danger);font-weight:700;}
+.prazo-estourado svg{color:var(--danger);}
+.prazo-semana{color:var(--warn-text);font-weight:700;}
+.prazo-semana svg{color:var(--warn-text);}
+.tipo-bug{color:var(--danger);}
+.impedida{color:var(--warn-text);}
+
+.vazio{display:flex;flex-direction:column;align-items:center;gap:var(--sp-3);padding:var(--sp-6) var(--sp-5);
+  text-align:center;}
+.vazio-icn{width:52px;height:52px;border-radius:var(--r-lg);background:var(--surface-3);color:var(--text-faint);
+  display:flex;align-items:center;justify-content:center;}
+.vazio-icn svg{width:24px;height:24px;}
+.vazio h3{margin:0;font-size:var(--fs-lg);}
+.vazio p{margin:0;max-width:460px;font-size:var(--fs-sm);line-height:1.6;color:var(--text-faint);}
+
+.rodape{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--gutter);
+  border-top:1px solid var(--border);background:var(--surface-2);font-size:var(--fs-xs);color:var(--text-muted);flex:none;}
+.legenda{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center;}
+.legenda i{display:inline-flex;align-items:center;gap:var(--sp-1);font-style:normal;}
+.legenda i b{width:8px;height:8px;border-radius:var(--r-full);display:block;}
+.hidden{display:none !important;}
+
+/* ===== abas ===== */
+.abas{display:flex;gap:2px;background:var(--surface-3);padding:3px;border-radius:var(--r-md);}
+.aba-btn{display:flex;align-items:center;gap:var(--sp-2);border:0;background:transparent;padding:0 var(--sp-3);
+  height:var(--ctrl-h);border-radius:var(--r-sm);font-size:var(--fs-sm);font-weight:600;color:var(--text-muted);cursor:pointer;}
+.aba-btn.on{background:var(--surface);color:var(--text);box-shadow:var(--shadow);}
+.aba-btn .badge{background:var(--success-bg);color:var(--success);border-radius:var(--r-full);
+  padding:1px var(--sp-2);font-size:var(--fs-label);font-weight:700;}
+.painel{display:none;min-height:0;flex:1;flex-direction:column;}
+.painel.on{display:flex;}
+
+/* ===== checklist ===== */
+/* Esta aba é a mesma do Painel de Tarefas: mesma faixa de cabeçalho com o
+   seletor de pessoa, mesma barra de filtros, mesma grade de linhas. A única
+   coluna a mais é Versão, que só existe aqui. Os componentes compartilhados
+   com as outras abas (.toolbar, .busca, .pop*, .etiqueta, .vazio, .contador,
+   .trilha) estão definidos uma vez só, lá em cima. Larguras numa fonte única —
+   valem no cabeçalho e na linha, então a grade fica alinhada por construção. */
+:root{
+  --row-gap:var(--sp-3);
+  --accent-1-ink:#ffffff; --success-ink:#ffffff;
+  --w-grip:16px; --w-key:88px; --w-type:80px; --w-status:152px;
+  --w-squad:96px; --w-cliente:144px; --w-prio:80px; --w-versao:112px;
+  --w-entrega:72px; --w-act:26px; --w-summary-min:180px;
+}
+
+/* faixa de cabeçalho: pessoa, atualizar, progresso, pílulas de estado */
+.cl-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-4);padding:var(--sp-3) var(--gutter);
+  border-bottom:1px solid var(--border);flex:none;}
+.pessoa-btn{display:flex;align-items:center;gap:var(--sp-2);border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--r-lg);padding:var(--sp-1) var(--sp-3) var(--sp-1) var(--sp-1);cursor:pointer;box-shadow:var(--shadow);}
+.pessoa-avatar{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--r-md);
+  background:var(--text);color:var(--surface);font-weight:700;font-size:var(--fs-xs);flex:none;}
+.pessoa-nome{display:block;font-size:var(--fs-md);font-weight:700;line-height:1.25;text-align:left;color:var(--text);}
+.pessoa-sub{display:block;font-size:var(--fs-xs);color:var(--text-faint);text-align:left;}
+.pessoa-btn svg.chev{color:var(--text-faint);}
+.state-pills{margin-left:auto;display:flex;flex-wrap:wrap;gap:var(--sp-2);}
+.state-pill{display:inline-flex;align-items:center;gap:var(--sp-2);border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--r-full);padding:3px var(--sp-3);font-size:var(--fs-xs);color:var(--text-muted);}
+.state-pill .ponto{width:7px;height:7px;border-radius:var(--r-full);}
+.state-pill b{font-family:var(--font-mono);color:var(--text-faint);font-weight:700;}
+.state-pill.emph{font-weight:700;color:var(--text);}
+
+.revive-pill{display:inline-flex;align-items:center;gap:var(--sp-2);border:1px solid var(--warn-border);background:var(--warn-bg);
+  color:var(--warn-text);border-radius:var(--r-full);padding:0 var(--sp-3);height:var(--ctrl-h);font-size:var(--fs-xs);
+  font-weight:600;cursor:pointer;animation:pulsar 2.4s ease-in-out infinite;}
+@keyframes pulsar{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb, var(--warn-text) 35%, transparent);}50%{box-shadow:0 0 0 5px transparent;}}
+@media (prefers-reduced-motion: reduce){ .revive-pill{animation:none;} }
+
+/* cabeçalho, linhas e separadores compartilham recuo, gap e larguras */
+.cl-cols,.cl-row,.section-sep{display:flex;align-items:center;gap:var(--row-gap);
+  padding-left:var(--sp-6);padding-right:var(--sp-6);min-width:1220px;}
+.cl-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
+  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+.cl-list{flex:1;min-height:0;overflow:auto;}
+#cl-rows{padding-bottom:var(--sp-4);min-width:1220px;}
+.cl-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
+  border-bottom:1px solid var(--border);background:var(--surface);}
+.cl-row:hover{background:var(--surface-2);}
+.cl-row.rosa{background:color-mix(in srgb, var(--danger) 5%, var(--surface));}
+.cl-row.rosa:hover{background:color-mix(in srgb, var(--danger) 9%, var(--surface));}
+.cl-row.feita{background:var(--surface-2);}
+.cl-row.feita:hover{background:var(--surface-3);}
+.cl-row.dragging{opacity:.3;}
+/* destino do arraste: risco acima ou abaixo, conforme a metade da linha */
+.cl-row.over::before{content:"";position:absolute;top:-1px;left:0;right:0;height:2px;background:var(--accent-2);z-index:2;}
+.cl-row.over-abaixo::after{content:"";position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--accent-2);z-index:2;}
+.cl-row[draggable="false"] .grip{cursor:default;opacity:.35;}
+.cl-stripe{position:absolute;left:0;top:0;bottom:0;width:3px;}
+
+.grip,.cl-c-grip{width:var(--w-grip);flex:none;}
+.grip{color:var(--text-faint);cursor:grab;}
+.cl-key,.cl-c-key{width:var(--w-key);flex:none;}
+.cl-summary{flex:1;min-width:var(--w-summary-min);display:flex;align-items:center;gap:var(--sp-2);}
+.cl-summary .txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cl-type{width:var(--w-type);flex:none;}
+.cl-status{width:var(--w-status);flex:none;}
+.cl-squad{width:var(--w-squad);flex:none;}
+.cl-cliente{width:var(--w-cliente);flex:none;}
+.cl-prio{width:var(--w-prio);flex:none;}
+.cl-versao{width:var(--w-versao);flex:none;}
+.cl-updated{width:var(--w-entrega);flex:none;display:flex;align-items:center;gap:3px;}
+.cl-dismiss,.cl-c-act{width:var(--w-act);flex:none;}
+/* Estilo de TEXTO só dentro da linha, para não vazar no cabeçalho — é o que
+   fazia cada rótulo de coluna sair num tamanho diferente no painel antigo. */
+.cl-row .cl-key{font-family:var(--font-mono);font-size:var(--fs-xs);font-weight:700;letter-spacing:-.01em;text-decoration:none;}
+.cl-row .cl-type,
+.cl-row .cl-squad,
+.cl-row .cl-cliente,
+.cl-row .cl-versao,
+.cl-row .cl-prio{font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cl-row .cl-updated{font-family:var(--font-mono);font-size:var(--fs-xs);}
+/* Especificidade: .cl-row .cl-updated já ganha de .prazo-*, então as cores
+   precisam ser repetidas aqui — é o que a regra do .venceu fazia antes. */
+.cl-row .cl-updated.prazo-estourado{color:var(--danger);font-weight:700;}
+.cl-row .cl-updated.prazo-estourado svg{color:var(--danger);}
+.cl-row .cl-updated.prazo-semana{color:var(--warn-text);font-weight:700;}
+.cl-row .cl-updated.prazo-semana svg{color:var(--warn-text);}
+.chip-mini{flex:none;border-radius:var(--r-full);padding:1px var(--sp-2);font-size:var(--fs-label);font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em;}
+.chip-voltou{background:var(--warn-bg);color:var(--warn-text);}
+.chip-disp{background:var(--surface);border:1px solid var(--danger-border);color:var(--danger);}
+.chip-impedida{background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text);}
+.cl-dismiss{display:flex;align-items:center;justify-content:center;height:var(--ctrl-h-sm);border-radius:var(--r-sm);
+  border:0;background:transparent;color:var(--text-faint);cursor:pointer;}
+.cl-dismiss:hover{background:var(--surface-3);color:var(--danger);}
+.section-sep{padding-top:var(--sp-2);padding-bottom:var(--sp-2);background:var(--surface-2);color:var(--text-faint);
+  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+.section-sep .line{flex:1;height:1px;background:var(--border);}
+
+/* ===== aba Homologação geral =====
+   Mesma gramática de linhas da Checklist, colunas próprias: a marca do teste
+   na frente e a observação livre no fim — as colunas G e N da aba "Testes
+   (homolog master)" da planilha de versões, que é o que esta aba substitui. */
+.hg-cols,.hg-row,.hg-sep{display:flex;align-items:center;gap:var(--row-gap);
+  padding-left:var(--sp-6);padding-right:var(--sp-6);min-width:1560px;}
+.hg-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
+  background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
+  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+.hg-list{flex:1;min-height:0;overflow:auto;}
+#hg-rows{padding-bottom:var(--sp-4);min-width:1560px;}
+.hg-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
+  border-bottom:1px solid var(--border);background:var(--surface);}
+.hg-row:hover{background:var(--surface-2);}
+.hg-row.testada{background:color-mix(in srgb, var(--success) 6%, var(--surface));}
+.hg-row.testada:hover{background:color-mix(in srgb, var(--success) 10%, var(--surface));}
+/* UM separador, e sempre no pé: o bloco da próxima versão. Não é o
+   agrupamento por release de volta — é a mesma gramática das "Concluídas" da
+   Checklist, onde o que saiu desta rodada desce e deixa de atravessar a lista
+   de quem está homologando. Sem tinta na linha de propósito: o fundo verde de
+   ".testada" é o sinal que se procura descendo a fila, e disputar esse canal
+   com o corte da rodada tiraria justamente o que a marca do teste diz. */
+.hg-sep{padding-top:var(--sp-2);padding-bottom:var(--sp-2);background:var(--surface-2);color:var(--text-faint);
+  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+.hg-sep .line{flex:1;height:1px;background:var(--border);}
+/* Ordenadores do cabeçalho. O cabeçalho daqui é uma LINHA FLEX, não uma tabela,
+   então o botão não pode ser o .th-btn da aba Tarefas: aquele tem altura própria
+   (--head-h) e engordaria a faixa, que aqui é só padding. Este herda a
+   tipografia de .hg-cols e acrescenta só o alvo de clique e a seta. */
+.hg-cols button.ord,.cl-cols button.ord{display:flex;align-items:center;gap:var(--sp-1);width:100%;border:0;padding:0;
+  background:transparent;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;
+  cursor:pointer;overflow:hidden;text-align:left;}
+/* O rótulo trunca em span próprio: ellipsis não se aplica a nó de texto solto
+   dentro de um flex, e a seta tem de ficar fora do truncamento. */
+.hg-cols button.ord .lab,.cl-cols button.ord .lab{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hg-cols button.ord:hover,.cl-cols button.ord:hover{color:var(--text);}
+.hg-cols button.ord.on,.cl-cols button.ord.on{color:var(--text);}
+.hg-cols button.ord svg.seta,.cl-cols button.ord svg.seta{color:var(--accent-2);flex:none;}
+.hg-marca,.hg-c-marca{width:28px;flex:none;display:flex;align-items:center;justify-content:center;}
+.hg-marca button{display:flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;
+  border-radius:var(--r-sm);border:1.5px solid var(--border-strong);background:transparent;color:transparent;cursor:pointer;}
+.hg-marca button:hover{border-color:var(--success);}
+.hg-marca button.on{background:var(--success);border-color:var(--success);color:var(--success-ink);}
+.hg-marca button svg{width:11px;height:11px;stroke-width:3;}
+.hg-testes,.hg-c-testes{width:170px;flex:none;}
+.hg-est,.hg-c-est{width:52px;flex:none;}
+.hg-obs,.hg-c-obs{width:220px;flex:none;}
+.hg-obs input{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
+  padding:2px var(--sp-2);font-family:inherit;font-size:var(--fs-xs);color:var(--text-muted);outline:0;}
+.hg-obs input:hover{border-color:var(--border);}
+.hg-obs input:focus{border-color:var(--focus);background:var(--surface);color:var(--text);}
+/* Coluna de ação da linha: tira a tarefa da fila — ou, na vista das
+   removidas, traz de volta. Mesmo desenho do "dispensar" da Checklist. */
+.hg-act,.hg-c-act{width:var(--w-act);flex:none;display:flex;align-items:center;justify-content:center;}
+.hg-act button{display:flex;align-items:center;justify-content:center;width:100%;height:var(--ctrl-h-sm);
+  padding:0;border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-faint);cursor:pointer;}
+.hg-act button:hover{background:var(--surface-3);color:var(--danger);}
+.hg-act button.voltar:hover{color:var(--success);}
+/* Fora da fila: linha esmaecida — está ali para ser conferida e eventualmente
+   trazida de volta, não para ser trabalhada. */
+.hg-row.fora{background:var(--surface-2);}
+.hg-row.fora .cl-key,.hg-row.fora .cl-summary .txt{color:var(--text-muted);}
+.chip-extra{background:var(--info-bg);border:1px solid var(--info-border);color:var(--info-text);}
+.chip-fora{background:var(--surface);border:1px solid var(--danger-border);color:var(--danger);}
+.hg-sub{font-size:var(--fs-xs);color:var(--text-faint);}
+/* Versão ajustada no painel: sublinhado pontilhado em vez de cor forte — é uma
+   informação de procedência, não um alerta. O title diz o que o Jira tem. */
+.ajustada{text-decoration:underline dotted;text-underline-offset:2px;color:var(--info-text) !important;}
+.chip-ajuste{background:var(--info-bg);border:1px solid var(--info-border);color:var(--info-text);}
+/* O seletor de versão da linha. Sem cara de campo até o mouse chegar, como a
+   observação: são 47 linhas, e 47 caixas desenhadas viram ruído. */
+.hg-versao,.hg-c-versao{width:132px;flex:none;}
+.hg-versao select{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
+  height:var(--ctrl-h-sm);padding:0 var(--sp-1);font-family:inherit;font-size:var(--fs-sm);
+  color:var(--text-faint);cursor:pointer;outline:0;}
+.hg-versao select:hover{border-color:var(--border);color:var(--text);}
+.hg-versao select:focus{border-color:var(--focus);background:var(--surface);color:var(--text);}
+.hg-versao.ajustada select{color:var(--info-text);text-decoration:none;}
+.hg-versao.ajustada{text-decoration:none;}
+/* Versão escolhida e ainda não gravada: âmbar, como tudo que está "pendente"
+   no painel. Fica no select, não na linha — o verde de .testada segue sendo o
+   sinal que se procura descendo a fila. */
+.hg-versao.pendente select{background:var(--warn-bg);border-color:var(--warn-border);
+  color:var(--warn-text);font-weight:600;}
+.hg-lote{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--gutter);
+  border-bottom:1px solid var(--warn-border);background:var(--warn-bg);color:var(--warn-text);
+  font-size:var(--fs-sm);flex:none;}
+.hg-lote .msg{flex:1;min-width:200px;}
+.lote-lista{max-height:240px;overflow:auto;margin-top:var(--sp-2);font-family:var(--font-mono);
+  font-size:var(--fs-xs);border:1px solid var(--border);border-radius:var(--r-sm);padding:var(--sp-2);}
+/* Colunas VERSÃO ATUAL e PRÓXIMA VERSÃO — o corte da rodada de homologação.
+   As duas células têm a MESMA largura e o conteúdo centrado: é a POSIÇÃO do ×
+   que se lê, descendo a lista, e larguras diferentes fariam a coluna do × mudar
+   de lugar de uma linha para a outra.
+   O × é marca, não botão: quem move é a seta, e uma marca clicável no campo
+   onde a tarefa JÁ está não teria para onde levar. A seta mora sempre no campo
+   VAZIO e aponta para o próprio campo — clicar nela é trazer a tarefa para ali,
+   o que é a mesma leitura nas duas direções.
+   A cor do × muda com o campo (neutro na atual, âmbar na próxima) para o corte
+   também se ler no periférico; a FORMA é a mesma nos dois lados, porque quem
+   identifica o campo é a coluna, não o símbolo. */
+.hg-fase,.hg-c-fase{width:104px;flex:none;display:flex;align-items:center;justify-content:center;}
+.hg-c-fase{white-space:nowrap;}
+.hg-fase .aqui{display:flex;align-items:center;justify-content:center;width:20px;height:20px;
+  border-radius:var(--r-sm);background:var(--surface-3);color:var(--text);}
+.hg-fase .aqui svg{width:13px;height:13px;stroke-width:2.6;}
+.hg-fase button{display:flex;align-items:center;justify-content:center;width:26px;height:20px;padding:0;
+  border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-faint);cursor:pointer;}
+.hg-fase button:hover{background:var(--surface-3);color:var(--accent-2);}
+.hg-fase button svg{width:15px;height:15px;}
+.hg-row.proxima .hg-fase .aqui{background:var(--warn-bg);color:var(--warn-text);}
+/* Estilo de texto só dentro da linha, como na Checklist, para não vazar no
+   cabeçalho de colunas. */
+.hg-row .cl-key{font-family:var(--font-mono);font-size:var(--fs-xs);font-weight:700;
+  letter-spacing:-.01em;text-decoration:none;color:var(--text);}
+.hg-row .cl-summary .txt{color:var(--text);}
+.hg-row .cl-type,.hg-row .cl-versao,.hg-row .hg-testes,.hg-row .hg-est{font-size:var(--fs-sm);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hg-row .cl-updated{font-family:var(--font-mono);font-size:var(--fs-xs);}
+.hg-row .cl-updated.prazo-estourado{color:var(--danger);font-weight:700;}
+.hg-row .cl-updated.prazo-estourado svg{color:var(--danger);}
+.hg-row .cl-updated.prazo-semana{color:var(--warn-text);font-weight:700;}
+.hg-row .cl-updated.prazo-semana svg{color:var(--warn-text);}
+
+/* popovers — um vocabulário só, valendo nas quatro abas */
+.pop{position:absolute;left:0;top:calc(100% + var(--sp-2));z-index:40;width:320px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow-pop);overflow:hidden;}
+.pop.wide{width:340px;}
+.pop-cab{border-bottom:1px solid var(--border);padding:var(--sp-2) var(--sp-3);font-size:var(--fs-xs);
+  line-height:1.5;color:var(--text-muted);}
+.pop-search{display:flex;align-items:center;gap:var(--sp-2);background:var(--surface-3);border-radius:var(--r-md);
+  padding:0 var(--sp-3);height:var(--ctrl-h);margin:var(--sp-2);}
+.pop-search svg{color:var(--text-faint);flex:none;}
+.pop-search input{border:0;background:transparent;outline:0;font-size:var(--fs-sm);color:var(--text);width:100%;}
+.pop-lista{max-height:320px;overflow:auto;padding:var(--sp-1);}
+.pop-item{display:flex;align-items:center;gap:var(--sp-2);width:100%;text-align:left;border:0;background:transparent;
+  padding:var(--sp-2);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-sm);color:var(--text-muted);}
+.pop-item:hover,.pop-item.hi{background:var(--surface-3);}
+.pop-item.on{color:var(--text);font-weight:600;}
+.pop-empty{padding:var(--sp-5) var(--sp-3);text-align:center;font-size:var(--fs-sm);color:var(--text-faint);}
+.dd{position:relative;}
+/* Popover do filtro multi: fixo na janela e posto sob o botão do cabeçalho.
+   Dentro do <th> ele seria cortado pelo overflow da tabela e remontado a cada
+   marcação. */
+.pop.pop-fixo{position:fixed;top:0;left:0;}
+.pop-item .qtd{margin-left:auto;font-family:var(--font-mono);font-size:var(--fs-label);color:var(--text-faint);}
+.pop-item .nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chk{flex:none;display:flex;align-items:center;justify-content:center;width:16px;height:16px;
+  border-radius:var(--r-sm);border:1.5px solid var(--border-strong);}
+.chk.on{background:var(--text);border-color:var(--text);color:var(--surface);}
+.chk.on svg{width:10px;height:10px;stroke:currentColor;stroke-width:3;}
+.chk.amber.on{background:var(--accent-1);border-color:var(--accent-1);color:var(--accent-1-ink);}
+.chk.green.on{background:var(--success);border-color:var(--success);color:var(--success-ink);}
+
+@media (max-width:900px){ .cl-type,.cl-squad,.cl-prio{display:none;} }
+</style>
+
+<div class="app-shell"><div class="app-card" id="app"></div></div>
+<script id="estado-replicado" type="application/json">null</script>
+
+<script type="module" src="./boot.js"></script>
+</body>
+</html>
