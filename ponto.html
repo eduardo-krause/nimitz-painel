@@ -1,0 +1,480 @@
+<!doctype html><html lang="pt-BR" data-theme="light"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+
+
+<title>Ponto das Tarefas</title>
+
+
+
+<style>
+/* Layout: barra do cronômetro fixa no topo; abaixo, semana em dias (coluna principal) + resumo por tarefa (lateral) */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --surface-2:#eaeef2; --line:#d6dde4;
+  --ink:#15212c; --muted:#5b6b79; --accent:#0e7a5c; --accent-ink:#ffffff;
+  --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%235b6b79' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --stop:#c2412d; --warn:#a86300; --warn-bg:#fdf1dc; --ok:#0e7a5c; --ok-bg:#dff3ea; --err:#b3261e; --err-bg:#fbe3e0;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161c; --surface:#16212a; --surface-2:#1d2a35; --line:#2a3946;
+  --ink:#e4ebf0; --muted:#93a4b2; --accent:#3cc497; --accent-ink:#06231a;
+  --stop:#f07a63; --warn:#f1b55a; --warn-bg:#3a2b12; --ok:#3cc497; --ok-bg:#12352a; --err:#f28b82; --err-bg:#3d1b18; --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2393a4b2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161c; --surface:#16212a; --surface-2:#1d2a35; --line:#2a3946;
+  --ink:#e4ebf0; --muted:#93a4b2; --accent:#3cc497; --accent-ink:#06231a;
+  --stop:#f07a63; --warn:#f1b55a; --warn-bg:#3a2b12; --ok:#3cc497; --ok-bg:#12352a; --err:#f28b82; --err-bg:#3d1b18; --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2393a4b2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;display:flex;flex-direction:column;gap:18px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--f-display);font-size:26px;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* cronômetro */
+.timer{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;grid-template-columns:170px minmax(0,1fr) 170px 112px auto auto;gap:10px;align-items:center;box-shadow:0 6px 18px -14px rgba(0,0,0,.35)}
+.taskname{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:8px 10px;width:100%;min-width:0;font-weight:500;color:var(--ink);text-overflow:ellipsis}
+.taskname.idle{color:var(--muted);font-weight:400}
+.taskname option,.taskname optgroup{color:var(--ink);font-weight:400}
+.field select{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:8px 8px;width:100%;min-width:0}
+#startIn{font-family:var(--f-mono)}
+.f-start .hint{color:var(--muted)}
+.f-start.adjusted input{border-color:var(--warn)}
+.cat{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.cat i,.catlist i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.catlist{display:flex;flex-direction:column;gap:4px}
+.catlist .ci{display:flex;align-items:center;gap:8px;font-size:13px;min-height:26px}
+.catlist .ci span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.catlist .ci small{color:var(--muted);font-size:11px}
+.catadd{display:flex;gap:6px;margin-top:8px}
+.catadd input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 8px;color:var(--ink)}
+.catadd .err{color:var(--err);font-size:12px}
+.timer.running{border-color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:2px;min-width:0}
+.field input{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:8px 10px;width:100%;min-width:0}
+.field .hint{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:17px}
+.field .hint.bad{color:var(--err)}
+#issueIn{font-family:var(--f-mono)}
+.clock{font-family:var(--f-mono);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;min-width:128px;text-align:right}
+.play{border:0;border-radius:999px;width:52px;height:52px;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink)}
+.play.stop{background:var(--stop);color:#fff}
+.play svg{width:22px;height:22px}
+.play:disabled{opacity:.5;cursor:default}
+
+.recent{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.recent .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:12.5px;display:inline-flex;gap:6px;align-items:center;max-width:100%}
+.chip b{font-family:var(--f-mono);font-weight:600}
+.chip span{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.chip:hover{border-color:var(--accent)}
+
+/* barra de semana */
+.weekbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.weekbar .nav{display:flex;gap:4px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 12px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--err);border-color:var(--err)}
+.btn.small{padding:3px 9px;font-size:12.5px}
+.weekbar h2{font-size:15px;margin:0;font-weight:600}
+.weekbar .total{margin-left:auto;display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+.weekbar .total .big{font-family:var(--f-mono);font-size:20px;font-weight:600}
+.toggle{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+.days{display:flex;flex-direction:column;gap:14px;min-width:0}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.day-h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface-2);font-size:13px;gap:8px;flex-wrap:wrap}
+.day-h .d{font-weight:600}
+.day-h .d small{color:var(--muted);font-weight:400;margin-left:6px}
+.day-h .r{display:flex;gap:10px;align-items:center}
+.row{display:grid;grid-template-columns:120px minmax(0,1fr) 112px 70px auto;gap:10px;align-items:center;padding:9px 12px;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .key{font-family:var(--f-mono);font-weight:600;color:var(--accent);text-decoration:none}
+.row .key:hover{text-decoration:underline}
+.row .what{min-width:0}
+.row .what .s{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .what .dsc{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .when{color:var(--muted);font-size:13px}
+.row .dur{font-weight:600;text-align:right}
+.row .acts{display:flex;gap:4px;justify-content:flex-end;align-items:center}
+.icon{border:0;background:transparent;border-radius:6px;padding:5px;color:var(--muted);display:grid;place-items:center}
+.icon:hover{background:var(--surface-2);color:var(--ink)}
+.icon svg{width:16px;height:16px}
+.pill{font-size:11.5px;padding:2px 8px;border-radius:999px;white-space:nowrap;border:0;font-weight:500}
+.pill.sent{background:var(--ok-bg);color:var(--ok)}
+.pill.pending{background:var(--surface-2);color:var(--muted)}
+.pill.err{background:var(--err-bg);color:var(--err)}
+.pill.check{background:var(--warn-bg);color:var(--warn)}
+button.pill{cursor:pointer}
+.row .msg{grid-column:1/-1;font-size:12.5px;color:var(--err);margin-top:-4px}
+.row .msg.warn{color:var(--warn)}
+
+.edit select{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 8px;color:var(--ink);font-size:13.5px;min-width:0;width:100%}
+.edit{display:grid;grid-template-columns:130px minmax(0,1fr) 140px 92px 92px;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:var(--surface-2);align-items:end}
+.edit label{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--muted);min-width:0}
+.edit input{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 8px;color:var(--ink);font-size:13.5px;min-width:0;width:100%}
+.edit .bar{grid-column:1/-1;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.edit .bar .err{color:var(--err);font-size:12.5px;margin-right:auto}
+
+aside{display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 96px)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.sum{display:flex;flex-direction:column;gap:8px}
+.sum .it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;font-size:13px}
+.sum .it .k{font-family:var(--f-mono);font-weight:600}
+.sum .it .t{text-align:right;font-family:var(--f-mono);font-weight:600}
+.sum .it .n{grid-column:1/-1;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden}
+.sum .bar i{display:block;height:100%;background:var(--accent)}
+.daybars{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:110px}
+.daybars .c{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.daybars .b{width:100%;max-width:26px;background:var(--accent);border-radius:3px 3px 0 0;min-height:1px}
+.daybars .b.zero{background:var(--line)}
+.daybars .l{font-size:11px;color:var(--muted)}
+.daybars .v{font-size:10.5px;font-family:var(--f-mono);color:var(--muted)}
+
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:10px;padding:28px 20px;text-align:center;color:var(--muted)}
+.empty b{color:var(--ink)}
+.banner{border-radius:8px;padding:10px 12px;font-size:13px;background:var(--warn-bg);color:var(--warn)}
+.banner.err{background:var(--err-bg);color:var(--err)}
+
+.key.internal{font-family:var(--f-body);font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.chip.task{border-style:dashed}
+.chip.task b{font-family:var(--f-body)}
+.taskadd{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.taskadd input,.taskadd select{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:6px 8px;color:var(--ink);min-width:0;width:100%}
+.taskadd .full{grid-column:1/-1}
+/* perfis (várias pessoas na mesma conta) */
+.who{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:0}
+.who label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);white-space:nowrap}
+.who .fs{width:auto;min-width:190px;max-width:260px}
+.who .fs-btn{padding:6px 10px;font-weight:600}
+.modal{position:fixed;inset:0;z-index:40;background:rgba(10,16,22,.5);display:grid;place-items:center;padding:16px}
+.modal[hidden],[hidden]{display:none!important}
+.modal-card{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 60px -20px rgba(0,0,0,.5);width:min(460px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:20px;display:flex;flex-direction:column;gap:14px}
+.modal-card h2{margin:0;font-family:var(--f-display);font-size:20px}
+.modal-card p{margin:0;color:var(--muted);font-size:13px}
+.pick{display:flex;flex-direction:column;gap:8px}
+.pick button{display:flex;align-items:center;gap:12px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:12px 14px;font-size:15px;font-weight:600;text-align:left}
+.pick button:hover{border-color:var(--accent)}
+.pick .av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-size:14px;flex:none}
+.plist{display:flex;flex-direction:column;gap:8px}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center}
+.prow input[type=text]{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:7px 9px;color:var(--ink);min-width:0;width:100%}
+.prow label{display:flex;gap:5px;align-items:center;font-size:12px;color:var(--muted);white-space:nowrap}
+.padd{display:flex;gap:6px}
+.padd input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:7px 9px;color:var(--ink)}
+.modal-card .foot{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.modal-card .err{color:var(--err);font-size:12.5px}
+.row .msg.info{color:var(--muted)}
+a.pill{text-decoration:none;display:inline-block}
+.linkbtn{border:0;background:none;padding:0;color:var(--accent);font:inherit;text-decoration:underline;cursor:pointer}
+.bmrow{display:flex;justify-content:center;padding:6px 0}
+#bmLink{font-size:15px;padding:10px 18px;cursor:grab;text-decoration:none}
+.modal-card details summary{cursor:pointer;color:var(--muted);font-size:13px}
+.modal-card details p{margin-top:8px}
+/* abas e relatório */
+.tabs{display:inline-flex;background:var(--surface-2);border-radius:8px;padding:3px;gap:2px}
+.tabs button{border:0;background:transparent;border-radius:6px;padding:6px 14px;color:var(--muted);font-weight:500}
+.tabs button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.view{display:flex;flex-direction:column;gap:18px}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+.filters label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted);min-width:0}
+.filters select,.filters input{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:7px 9px;color:var(--ink);font-size:13.5px;min-width:0}
+.filters .grow{flex:1 1 220px}
+.filters .grow input{width:100%}
+.filters .end{margin-left:auto;display:flex;gap:8px;align-items:center}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .l{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.kpi .v{font-family:var(--f-mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.focus{background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
+.focus .k{font-family:var(--f-mono);font-weight:600;color:var(--accent);font-size:16px}
+.focus .n{flex:1 1 260px;min-width:0;font-weight:500}
+.focus .m{display:flex;flex-direction:column}
+.focus .m b{font-family:var(--f-mono);font-size:20px}
+.focus .m span{font-size:11.5px;color:var(--muted)}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
+.chart h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.chart .scroll{overflow-x:auto}
+.chart svg{display:block}
+.chart svg text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+.chart svg .grid{stroke:var(--line)}
+.chart svg rect.bar{fill:var(--accent)}
+.chart svg rect.bar:hover{opacity:.8}
+.tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table.rep{width:100%;border-collapse:collapse;font-size:13.5px;min-width:760px}
+table.rep th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:9px 12px;background:var(--surface-2);white-space:nowrap}
+table.rep th button{border:0;background:transparent;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit}
+table.rep th button[data-active]{color:var(--ink)}
+table.rep td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:middle}
+table.rep td.num{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.rep tr.main{cursor:pointer}
+table.rep tr.main:hover td{background:var(--bg)}
+table.rep .nm{max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.rep .pct{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+table.rep .pct i{display:block;width:60px;height:5px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+table.rep .pct i b{display:block;height:100%;background:var(--accent)}
+table.rep tr.det td{background:var(--bg);padding:6px 12px 10px 36px}
+table.rep tfoot td{font-weight:600;border-top:2px solid var(--line)}
+/* registros da demanda: um por linha, em colunas alinhadas (data | início → fim | categoria | pessoa | duração) */
+.detlist{display:flex;flex-direction:column;font-size:13px}
+.detlist .dr{display:grid;grid-template-columns:130px 170px minmax(0,1fr) 90px;gap:16px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)}
+.detlist.team .dr{grid-template-columns:130px 170px minmax(0,1fr) minmax(0,200px) 90px}
+.detlist .dr:last-child{border-bottom:0}
+.detlist .dh{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding-top:2px;padding-bottom:5px}
+.detlist .d-day{color:var(--muted)}
+.detlist .d-day b{color:var(--ink);font-weight:500;font-family:var(--f-mono);margin-left:6px}
+.detlist .d-time{font-family:var(--f-mono);display:flex;align-items:center;gap:10px}
+.detlist .d-time i{font-style:normal;color:var(--muted)}
+.detlist .d-cat,.detlist .d-who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.detlist .d-who{color:var(--muted)}
+.detlist .d-dur{text-align:right;font-family:var(--f-mono);font-weight:600}
+@media (max-width:760px){ .detlist .dr,.detlist.team .dr{grid-template-columns:1fr auto;gap:2px 12px} .detlist .dh{display:none} .detlist .d-time{grid-row:2} .detlist .d-cat,.detlist .d-who{grid-column:1/-1} .detlist .d-dur{grid-row:1;grid-column:2} }
+.copied{font-size:12.5px;color:var(--ok)}
+@media (max-width:760px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width:1100px){
+  .timer{grid-template-columns:170px minmax(0,1fr) 170px auto auto}
+  .timer .f-desc{grid-column:2/-1;grid-row:1}
+  .timer .f-issue{grid-row:1}
+  .timer .f-cat{grid-column:1/3}
+}
+@media (max-width:900px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  aside{position:static}
+}
+@media (max-width:640px){
+  .timer{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;}
+  .timer .f-issue,.timer .f-desc{grid-column:1/-1;grid-row:auto}
+  .timer .f-cat{grid-column:1/2}
+  .timer .f-start{grid-column:2/4}
+  .clock{text-align:left;font-size:22px}
+  .row{grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
+  .row .key{grid-column:1}
+  .row .what{grid-column:1/-1;grid-row:2}
+  .row .when{grid-row:3}
+  .row .dur{grid-row:1;grid-column:2}
+  .row .acts{grid-row:3;grid-column:2}
+  .edit{grid-template-columns:1fr 1fr}
+  .edit .wide{grid-column:1/-1}
+}
+/* selects: seta própria, centralizada na vertical */
+select{appearance:none;-webkit-appearance:none;-moz-appearance:none;cursor:pointer;line-height:1.45;
+  background-image:var(--chev)!important;background-repeat:no-repeat!important;background-position:right 10px center!important;background-size:12px 12px!important;padding-right:30px!important}
+select::-ms-expand{display:none}
+/* seleção própria: botão + lista suspensa (o select nativo fica escondido e guarda o valor) */
+.fs{position:relative;display:block;min-width:0;width:100%}
+.fs-native{position:absolute!important;inset:0;opacity:0;pointer-events:none;width:100%!important;height:100%!important}
+.fs-btn{display:flex;align-items:center;gap:8px;width:100%;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:8px 10px;text-align:left;cursor:pointer;line-height:1.45;transition:border-color .12s,box-shadow .12s}
+.fs-btn:hover{border-color:var(--muted)}
+.fs-btn[aria-expanded="true"]{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.fs-btn .fs-lbl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px}
+.fs-btn .fs-lbl i,.fs-it i{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.fs-btn .fs-chev{flex:none;width:16px;height:16px;display:grid;place-items:center;color:var(--muted);transition:transform .15s}
+.fs-btn .fs-chev svg{width:14px;height:14px;display:block}
+.fs-btn[aria-expanded="true"] .fs-chev{transform:rotate(180deg);color:var(--accent)}
+.fs-btn.idle .fs-lbl{color:var(--muted)}
+.fs-btn.strong .fs-lbl{font-weight:500}
+.edit .fs-btn{background:var(--surface);padding:6px 8px;font-size:13.5px}
+.taskadd .fs-btn,.filters .fs-btn{padding:6px 9px;font-size:13.5px}
+.filters .fs{min-width:150px}
+.fs-pop{position:fixed;z-index:50;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 34px -12px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.08);padding:6px;overflow-y:auto;max-height:300px;display:flex;flex-direction:column;gap:1px;animation:fsIn .12s ease-out}
+@keyframes fsIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.fs-pop.up{animation-name:fsUp}
+@keyframes fsUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.fs-grp{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;padding:8px 10px 4px}
+.fs-sep{height:1px;background:var(--line);margin:4px 6px}
+.fs-it{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs-it span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.fs-it.active{background:var(--surface-2)}
+.fs-it.sel{font-weight:600}
+.fs-it .ck{width:14px;height:14px;flex:none;color:var(--accent);opacity:0}
+.fs-it.sel .ck{opacity:1}
+.fs-it.muted{color:var(--muted)}
+.fs-it.add{color:var(--accent);font-weight:500}
+input[list]::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Ponto das Tarefas</h1>
+      <div class="sub">Registre seu tempo e acompanhe as horas da equipe.</div>
+    </div>
+    <div class="tabs" role="group" aria-label="Telas">
+      <button id="tabTimer" aria-pressed="true">Cronômetro</button>
+      <button id="tabReport" aria-pressed="false">Relatório</button>
+    </div>
+    <div class="who">
+      <div>Registrando como <strong id="ponto-user-name">…</strong></div><select id="profSel" hidden><option value="main">…</option></select>
+      <div class="sub" id="connState">Conectando…</div>
+      <div id="whoAmI" hidden></div>
+    </div>
+  </header>
+
+  <div id="banner" hidden></div>
+
+  <div id="viewTimer" class="view">
+  <section class="timer" id="timer">
+    <div class="field f-issue">
+      <input id="issueIn" placeholder="NMTZ-12345" autocomplete="off" spellcheck="false" aria-label="Issue ou tarefa interna">
+      <datalist id="taskOptions"></datalist>
+      <div class="hint" id="issueHint">Issue ou tarefa interna</div>
+    </div>
+    <div class="field f-desc">
+      <select class="taskname idle" id="summaryHint" aria-label="Tarefa"><option value="">Digite a issue ou escolha uma tarefa interna</option></select>
+      <div class="hint">Tarefa</div>
+    </div>
+    <div class="field f-cat">
+      <select id="catIn" aria-label="Categoria"></select>
+      <div class="hint">Categoria</div>
+    </div>
+    <div class="field f-start" id="startField">
+      <input type="time" id="startIn" aria-label="Horário de início">
+      <div class="hint" id="startHint">Início: agora</div>
+    </div>
+    <div class="clock" id="clock">0:00:00</div>
+    <button class="play" id="playBtn" aria-label="Iniciar" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor" id="playIcon"><path d="M8 5.5v13l11-6.5z"/></svg>
+    </button>
+  </section>
+
+  <div class="recent" id="recent" hidden></div>
+
+  <section class="weekbar">
+    <div class="nav">
+      <button class="btn" id="prevWk" aria-label="Semana anterior">‹</button>
+      <button class="btn" id="thisWk">Hoje</button>
+      <button class="btn" id="nextWk" aria-label="Próxima semana">›</button>
+    </div>
+    <h2 id="wkLabel">Semana</h2>
+    <button class="btn small" id="addManual">+ Lançamento manual</button>
+    <button class="btn small" id="jiraSync" title="Busca suas horas no Jira na semana selecionada e nas tarefas já usadas aqui">Buscar horas do Jira</button>
+    <span class="sub" id="jiraSyncMsg" aria-live="polite"></span>
+    <div class="total">
+      <label class="toggle" id="autoSendWrap"><input type="checkbox" id="autoSend"> Enviar ao Jira ao parar</label>
+      <span class="sub" id="manualNote" hidden title="O login do Jira desta conta é de outra pessoa. Use “Lançar no Jira” em cada lançamento.">Seu perfil lança no Jira manualmente · <button type="button" class="linkbtn" data-bm>preencher data sozinho</button></span>
+      <button class="btn small" id="sendAll" hidden>Enviar pendentes</button>
+      <span class="sub">Total da semana</span><span class="big" id="wkTotal">0h 00m</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div class="days" id="days">
+      <div class="empty"><b>Carregando seus lançamentos…</b><br>Digite a issue acima e aperte play para começar a contar.</div>
+    </div>
+    <aside>
+      <div class="card">
+        <h3>Horas por dia</h3>
+        <div class="daybars" id="dayBars"></div>
+      </div>
+      <div class="card">
+        <h3>Por tarefa na semana</h3>
+        <div class="sum" id="byIssue"><div class="sub">Nenhum lançamento nesta semana.</div></div>
+      </div>
+      <div class="card">
+        <h3>Por categoria na semana</h3>
+        <div class="sum" id="byCat"><div class="sub">Nenhum lançamento nesta semana.</div></div>
+      </div>
+      <div class="card">
+        <h3>Tarefas internas</h3>
+        <div class="catlist" id="taskList"></div>
+        <form class="taskadd" id="taskAdd">
+          <input id="taskName" class="full" placeholder="Nome (ex.: Daily, Reunião avulsa)" maxlength="40" aria-label="Nome da tarefa interna">
+          <select id="taskCat" aria-label="Categoria da tarefa"></select>
+          <input id="taskJira" placeholder="Issue p/ horas (opcional)" autocomplete="off" aria-label="Issue do Jira para lançar as horas (opcional)">
+          <button class="btn small primary full">Adicionar tarefa</button>
+        </form>
+        <div class="catadd"><span class="err" id="taskErr"></span></div>
+      </div>
+      <div class="card">
+        <h3>Categorias</h3>
+        <div class="catlist" id="catList"></div>
+        <form class="catadd" id="catAdd">
+          <input id="catName" placeholder="Nova categoria" maxlength="40" aria-label="Nome da nova categoria">
+          <button class="btn small primary">Adicionar</button>
+        </form>
+        <div class="catadd"><span class="err" id="catErr"></span></div>
+      </div>
+    </aside>
+  </div>
+  </div>
+
+  <div id="viewReport" class="view" hidden>
+    <section class="filters">
+      <label>Período
+        <select id="rPeriod">
+          <option value="week">Esta semana</option>
+          <option value="lastweek">Semana passada</option>
+          <option value="month" selected>Este mês</option>
+          <option value="lastmonth">Mês passado</option>
+          <option value="30">Últimos 30 dias</option>
+          <option value="all">Tudo</option>
+          <option value="custom">Personalizado</option>
+        </select>
+      </label>
+      <label id="rFromL" hidden>De<input type="date" id="rFrom"></label>
+      <label id="rToL" hidden>Até<input type="date" id="rTo"></label>
+      <label>Pessoa<select id="rPerson"><option value="me">Só eu</option><option value="all">Equipe inteira</option></select></label>
+      <label>Categoria<select id="rCat"></select></label>
+      <label class="grow">Demanda<input id="rSearch" placeholder="NMTZ-12345, número ou parte do nome" autocomplete="off"></label>
+      <div class="end"><span class="copied" id="rCopied" aria-live="polite"></span><button class="btn small" id="rCopy">Copiar tabela</button></div>
+    </section>
+    <div id="rFocus"></div>
+    <section class="kpis" id="rKpis"></section>
+    <section class="chart" id="rPeople" hidden><h3>Por pessoa</h3><div class="sum" id="rPeopleList"></div></section>
+    <section class="chart"><h3 id="rChartTitle">Horas por dia</h3><div class="scroll" id="rChart"></div></section>
+    <div class="tablewrap" id="rTable"></div>
+  </div>
+
+</div>
+
+<div class="modal" id="chooseModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="chooseTitle">
+    <h2 id="chooseTitle">Quem está usando?</h2>
+    <p>Esta conta do Claude é usada por mais de uma pessoa. Escolha quem vai registrar horas neste navegador.</p>
+    <div class="pick" id="choosePick"></div>
+  </div>
+</div>
+<div class="modal" id="bmModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bmTitle">
+    <h2 id="bmTitle">Preencher a data no Jira</h2>
+    <p><b>Instale uma vez:</b> arraste o botão abaixo para a barra de favoritos do navegador. Se a barra não aparece, use Ctrl+Shift+B.</p>
+    <div class="bmrow"><a id="bmLink" class="btn primary" href="#" title="Arraste para a barra de favoritos">⏱ Preencher data</a></div>
+    <p><b>No dia a dia:</b> clique em “Lançar no Jira” e, com o Registrar trabalho aberto, clique em <b>⏱ Preencher data</b> na barra de favoritos. A Data de Início fica igual à do lançamento; é só salvar. Na primeira vez o navegador pode pedir para ler a área de transferência: permita.</p>
+    <details><summary>Não consegue arrastar?</summary><p>Crie um favorito qualquer, edite e cole este código no campo URL.</p><button class="btn small" id="bmCopy" type="button">Copiar código</button> <span class="sub" id="bmCopied"></span></details>
+    <div class="foot"><span class="sub" id="bmHint"></span><button class="btn" id="bmClose" type="button">Fechar</button></div>
+  </div>
+</div>
+<div class="modal" id="profModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="profTitle">
+    <h2 id="profTitle">Pessoas nesta conta</h2>
+    <p>Cada pessoa tem o próprio cronômetro e os próprios lançamentos. Só quem é dono do login do Jira desta conta envia worklog automático; as outras lançam no Jira manualmente.</p>
+    <div class="plist" id="profList"></div>
+    <form class="padd" id="profAdd"><input id="profName" placeholder="Nome da pessoa" maxlength="40" aria-label="Nome da nova pessoa"><button class="btn small primary">Adicionar</button></form>
+    <div class="foot"><span class="err" id="profErr"></span><button class="btn" id="profClose" type="button">Fechar</button></div>
+  </div>
+</div>
+<div class="modal" id="jwModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="jwTitle">
+    <h2 id="jwTitle">Quem é você no Jira?</h2>
+    <p id="jwText">O login do Jira desta conta é de outra pessoa. Escolha o seu usuário para trazer só os seus registros. Aparecem as pessoas que lançaram horas nas issues que você já usou aqui.</p>
+    <div class="pick" id="jwPick"></div>
+    <div class="foot"><span class="sub" id="jwHint"></span><button class="btn" id="jwClose" type="button">Cancelar</button></div>
+  </div>
+</div>
+
+<style>
+:root {--accent:#177b80;--f-display:"Segoe UI",system-ui,sans-serif;--f-body:"Segoe UI",system-ui,sans-serif;--f-mono:Consolas,monospace}
+.wrap{max-width:none;padding:20px 24px 40px}.top h1{font-size:22px;color:#17353e}.top .who{font-size:12px}
+.timer{border-radius:12px}.timer.running{border-color:#177b80}.fs:has(#profSel){display:none!important}
+@media(max-width:650px){.wrap{padding:14px 12px 32px}}
+</style><script type="module" src="./ponto-boot.js"></script>
+</body></html>

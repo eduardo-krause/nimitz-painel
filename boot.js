@@ -11,7 +11,7 @@ if (!settings.email) { settings = {}; sessionStorage.removeItem('nimitz-connecti
 if (local) settings.url = location.origin;
 else if (API_URL) settings.url = API_URL;
 const preview = new URLSearchParams(location.search).has('preview');
-const state = window.nimitz = {connected:!!(settings.url && settings.email && settings.token), preview, writes:false,
+const state = window.nimitz = {connected:!!(settings.url && settings.email && settings.token), preview, writes:false,worklogWrites:false,
   storagePrefix:preview ? 'nimitz-preview:' : 'nimitz-signedout:'};
 // Discard caches from the former shared-account version.
 Object.keys(localStorage).filter(k => k.startsWith('nimitz-rest:')).forEach(k => localStorage.removeItem(k));
@@ -24,13 +24,13 @@ async function request(path, body, connection = settings) {
     response = await fetch(connection.url.replace(/\/$/,'') + path, {
       method:body === undefined ? 'GET' : 'POST',
       headers:{Authorization:'Basic ' + btoa(connection.email + ':' + connection.token), 'Content-Type':'application/json',
-        'X-Jira-Scoped':String(!!connection.scoped), 'X-Allow-Writes':String(!!connection.writes)},
+        'X-Jira-Scoped':String(!!connection.scoped), 'X-Allow-Writes':String(!!connection.writes),'X-Allow-Worklogs':String(!!connection.worklogs)},
       ...(body === undefined ? {} : {body:JSON.stringify(body)}),
       signal:AbortSignal.timeout(40000), redirect:'error'
     });
   } catch { throw new Error('Não foi possível alcançar o backend. Confira o endereço e a conexão.'); }
   const data = await response.json().catch(() => ({message:'O backend retornou uma resposta inválida.'}));
-  if (!response.ok) throw Object.assign(new Error(data.message || 'Falha na API.'), data);
+  if (!response.ok) throw Object.assign(new Error(data.message || 'Falha na API.'), data,{status:response.status});
   return data;
 }
 state.request = (path, body) => {
@@ -82,6 +82,7 @@ $('connection-open').onclick = () => {
   $('jira-token').value = '';
   $('jira-scoped').checked = !!settings.scoped;
   $('jira-writes').checked = !!settings.writes;
+  $('jira-worklogs').checked = !!settings.worklogs;
   $('remote-fields').hidden = !!local || !!API_URL;
   $('local-fields').hidden = false;
   $('connection-help').textContent = 'Use sua própria conta Atlassian. As operações no Jira serão feitas em seu nome, conforme suas permissões.';
@@ -107,7 +108,7 @@ $('connection-form').onsubmit = async event => {
       backend = url.origin;
     }
     const candidate = {url:backend,email:$('jira-email').value.trim(),token:$('jira-token').value.trim(),
-      scoped:$('jira-scoped').checked,writes:$('jira-writes').checked};
+      scoped:$('jira-scoped').checked,writes:$('jira-writes').checked,worklogs:$('jira-worklogs').checked};
     if (!candidate.token && candidate.email === settings.email && candidate.url === settings.url) candidate.token = settings.token;
     await request('/api/health', undefined, candidate);
     sessionStorage.setItem('nimitz-connection', JSON.stringify(candidate));
@@ -131,10 +132,12 @@ if (preview && local) {
     try { health = await request('/api/health'); }
     catch { health = await request('/api/health'); }
     state.writes = health.writes;
+    state.worklogWrites = !!health.worklogWrites;
+    state.accountId=health.accountId;state.displayName=health.displayName;
     const identity = settings.url + '|' + health.project + '|' + health.accountId;
     const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity));
     state.storagePrefix = 'nimitz-user:' + Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('') + ':';
-    $('connection-status').textContent = `${health.displayName || settings.email} · ${health.writes ? 'gravação de versões habilitada' : 'somente leitura no Jira'} · marcações locais`;
+    $('connection-status').textContent = `${health.displayName || settings.email} · versões: ${health.writes ? 'edição habilitada' : 'leitura'} · horas: ${health.worklogWrites ? 'envio habilitado' : 'envio desligado'}`;
   } catch (error) {
     state.connected = false;
     $('connection-status').textContent = error.message;
@@ -149,6 +152,7 @@ script.onload = () => {
   document.querySelector('#app .topbar').appendChild(button);
   button.hidden = false;
   if(!state.connected && !preview) button.click();
+  initializePonto();
   state.refreshOrder();
   setInterval(()=>state.refreshOrder(),30000);
 };
@@ -209,3 +213,37 @@ state.saveOrder = async (person,keys) => {
     throw error;
   } finally { orderSaving=false; state.orderView.render(); }
 };
+
+let pontoFrame=null,pendingTask=null,activeTimer=null;
+state.pontoActive=()=>!!document.querySelector('[data-aba="ponto"].on');
+state.setPontoActive=active=>{
+  if(active&&!pontoFrame){
+    const panel=$('painel-ponto');if(!panel)return;
+    pontoFrame=document.createElement('iframe');pontoFrame.title='Ponto das Tarefas';
+    pontoFrame.src='./ponto.html';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:#f3f5f7';
+    panel.appendChild(pontoFrame);
+  }
+};
+state.pontoReady=()=>{
+  if(pendingTask&&pontoFrame?.contentWindow?.pontoSelectTask){pontoFrame.contentWindow.pontoSelectTask(pendingTask);pendingTask=null;}
+};
+state.updatePontoTimer=timer=>{activeTimer=timer;state.pontoRunning=!!timer?.running;paintTimerBadge();};
+function paintTimerBadge(){
+  const badge=$('ponto-timer-badge');if(!badge)return;
+  badge.hidden=!activeTimer?.running;
+  if(activeTimer?.running){
+    const seconds=Math.max(0,Math.floor((Date.now()-activeTimer.start)/1000));
+    badge.textContent=Math.floor(seconds/3600)+':'+String(Math.floor(seconds/60)%60).padStart(2,'0');
+    badge.title='Cronômetro ativo: '+(activeTimer.issue||activeTimer.summary||'tarefa');
+  }
+}
+function initializePonto(){
+  // Restore a running timer even when the user opens another tab first.
+  if(state.connected&&!preview) state.setPontoActive(true);
+  document.addEventListener('click',event=>{
+    const target=event.target.closest('[data-ponto-key]');if(!target)return;
+    event.preventDefault();event.stopPropagation();pendingTask=target.dataset.pontoKey;
+    document.querySelector('[data-aba="ponto"]').click();state.pontoReady();
+  });
+  setInterval(paintTimerBadge,1000);
+}

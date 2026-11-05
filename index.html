@@ -6,7 +6,13 @@
 <meta name="theme-color" content="#073e42">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Versões Nimitz</title>
-</head>
+<style>
+.ponto-shortcut{border:0;background:transparent;color:#177b80;cursor:pointer;padding:2px 3px;margin-left:3px;font-size:14px;border-radius:4px;line-height:1}
+.ponto-shortcut:hover{background:#dff2ef}.ponto-shortcut:focus-visible{outline:2px solid #177b80}
+.ponto-key-cell{display:flex;align-items:center;min-width:0;white-space:nowrap;width:120px;flex:none}
+.ponto-key-cell .cl-key{width:auto;flex:0 1 auto}.cl-c-key{min-width:120px}
+#ponto-timer-badge{color:#07594f;background:#d3f3e9;font-variant-numeric:tabular-nums}
+</style></head>
 <body>
 <button id="connection-open" class="btn" type="button" title="Configurar conexão com o Jira" hidden>Conexão</button>
 <dialog id="connection-dialog" style="width:min(520px,90vw);border:1px solid #acc;border-radius:12px;padding:24px;font:15px system-ui">
@@ -22,6 +28,7 @@
 <label>Token da API do Jira<input id="jira-token" type="password" autocomplete="off" style="display:block;width:100%;box-sizing:border-box;margin:6px 0 14px;padding:9px"></label>
 <label style="display:block;margin-bottom:12px"><input id="jira-scoped" type="checkbox"> Token com escopos (scoped)</label>
 <label style="display:block;margin-bottom:12px"><input id="jira-writes" type="checkbox"> Permitir alterar versões corrigidas no Jira</label>
+<label style="display:block;margin-bottom:12px"><input id="jira-worklogs" type="checkbox"> Permitir registrar e editar minhas horas no Jira</label>
 <p style="font-size:13px">Seu token fica na sessão desta aba e é enviado ao backend para autenticar os pedidos no Jira. Não é salvo no servidor. Use Sair e limpar dados ao terminar.</p>
 </div>
 <p id="connection-error" role="alert" style="color:#a22"></p>

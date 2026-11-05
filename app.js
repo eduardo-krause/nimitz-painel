@@ -109,7 +109,7 @@ var FASE_POR_STATUS = (function(){
    porque lá a escolha é de vários de uma vez. multi é a mesma ideia para uma
    coluna comum: o filtro guarda uma LISTA e abre o popover #pop-multi. */
 var COLUNAS = [
-  {id:"key",         rot:"Chave",             w:96,  tipo:"texto"},
+  {id:"key",         rot:"Chave",             w:148, tipo:"texto"},
   {id:"summary",     rot:"Resumo",            w:340, tipo:"texto"},
   {id:"type",        rot:"Tipo",              w:96,  tipo:"enum"},
   {id:"status",      rot:"Status",            w:152, tipo:"status"},
@@ -212,6 +212,7 @@ var ICONS = {
   list:'<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>'
 };
 function icon(n, s, cls){
+  if(n==="clock") return '<svg class="icon" viewBox="0 0 24 24" width="'+(s||14)+'" height="'+(s||14)+'"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
   return '<svg class="icon '+(cls||"")+'" viewBox="0 0 24 24" width="'+(s||14)+'" height="'+(s||14)+'">'+(ICONS[n]||"")+'</svg>';
 }
 
@@ -1817,6 +1818,7 @@ function montarShell(){
   +     '<button class="aba-btn" data-aba="versoes">'+icon("tag",14)+' Versões</button>'
   +     '<button class="aba-btn" data-aba="checklist">'+icon("check",14)+' Checklist <span class="badge hidden" id="badge-cl">0</span></button>'
   +     '<button class="aba-btn" data-aba="homolog">'+icon("flask",14)+' Homologação <span class="badge hidden" id="badge-hg">0</span></button>'
+  +     '<button class="aba-btn" data-aba="ponto">'+icon("clock",14)+' Ponto <span id="ponto-timer-badge" class="badge" hidden></span></button>'
   +   '</nav>'
   +   '<div class="campo-versao hidden" id="cx-versao">'
   +     '<select class="sel-inline" id="sel-versao" title="Recorta a lista por versão"></select>'
@@ -1837,6 +1839,7 @@ function montarShell(){
   + '<div class="statusbar hidden" id="aviso"></div>'
 
   /* ---------- aba Versão ---------- */
+  + '<div class="painel" id="painel-ponto"></div>'
   + '<div class="painel on" id="painel-tabela">'
   +   '<section class="resumo hidden" id="resumo"></section>'
   +   '<div class="toolbar hidden" id="toolbar">'
@@ -2010,7 +2013,13 @@ function montarShell(){
   ].forEach(function(id){ el[id]=document.getElementById(id); });
 }
 
+function pontoButton(key){
+  return '<button type="button" class="ponto-shortcut" data-ponto-key="'+esc(key)+'" title="Cronometrar '+esc(key)+'" aria-label="Cronometrar '+esc(key)+'">⏱</button>';
+}
 function renderTopo(){
+  /* PONTO_INTEGRATION */
+  document.getElementById("painel-ponto").classList.toggle("on",state.aba==="ponto");
+  if(window.nimitz.setPontoActive) window.nimitz.setPontoActive(state.aba==="ponto");
   var naTabela = state.aba==="tarefas" || state.aba==="versoes";
   el["cx-versao"].classList.toggle("hidden", state.aba!=="versoes");
   el["painel-tabela"].classList.toggle("on", naTabela);
@@ -2039,14 +2048,14 @@ function renderTopo(){
      a única porta de entrada, e é para ele que o estado vazio das duas abas
      manda clicar. */
   var abaTemAtualizar = state.aba==="checklist" || state.aba==="homolog";
-  el["bt-carregar"].classList.toggle("hidden", abaTemAtualizar && incremental);
+  el["bt-carregar"].classList.toggle("hidden", state.aba==="ponto" || (abaTemAtualizar && incremental));
   /* "Tudo" só some junto na Checklist, onde o menu da aba já oferece "Todas as
      pessoas" — que É a atualização do projeto inteiro, e ali em cima ele
      ficaria sozinho sem dizer nada. Na Homologação não há equivalente: o botão
      da aba confere a FILA, então o "Tudo" é a única porta para refazer o
      projeto sem trocar de aba, e fica. */
   var tudoDuplicado = state.aba==="checklist" && incremental;
-  el["bt-tudo"].classList.toggle("hidden", !incremental || tudoDuplicado);
+  el["bt-tudo"].classList.toggle("hidden", !incremental || tudoDuplicado || state.aba==="ponto");
   el["bt-tudo"].disabled = state.carregando;
 
   /* Os dois seletores saem dos dados carregados — nao ha mais campo livre,
@@ -2388,7 +2397,7 @@ function linhaHtml(t){
     return '<td class="'+cls+'"'+(title?' title="'+esc(title)+'"':'')+'>'+html+'</td>';
   }
   var cols = {
-    key:'<a class="chave" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+icon("ext",10)+'</a>',
+    key:'<a class="chave" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+icon("ext",10)+'</a>'+pontoButton(t.key),
     summary:(t.impedida?icon("flag",12,"impedida")+" ":"")+esc(t.summary),
     type:'<span class="'+(norm(t.type)==="bug"?"tipo-bug":"cel-faint")+'">'+esc(t.type)+'</span>',
     status:etiquetaStatus(t.status),
@@ -3056,7 +3065,7 @@ function renderClList(){
       + ' data-key="'+encodeURIComponent(t.key)+'" data-idx="'+i+'">'
       + '<span class="cl-stripe" style="'+faixa+'"></span>'
       + '<span class="grip">'+icon("grip",14)+'</span>'
-      + '<a class="cl-key mono" style="'+risco+'" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'
+      + '<span class="ponto-key-cell"><a class="cl-key mono" style="'+risco+'" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
       + '<span class="cl-summary"><span class="txt" style="'+risco+'">'+esc(t.summary)+'</span>'
       +   (voltou?'<span class="chip-mini chip-voltou">voltou</span>':"")
       +   (t.impedida
@@ -3639,7 +3648,7 @@ function linhaHomolog(t){
     + '<span class="hg-marca"><button type="button" data-marca="1" class="'+(marcada?"on":"")+'" title="'
     +   (marcada ? "Testada em homologação geral"+(quando?" em "+quando:"")+" — clique para desmarcar"
                  : "Marcar como testada em homologação geral")+'">'+icon("check",12)+'</button></span>'
-    + '<a class="cl-key" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'
+    + '<span class="ponto-key-cell"><a class="cl-key" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
     + '<span class="cl-summary"><span class="txt">'+esc(t.summary)+'</span>'
     +   (t.impedida ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">impedida no jira</span>' : "")
     +   (extra ? '<span class="chip-mini chip-extra" title="Posta na fila aqui'+(quandoExtra?" em "+quandoExtra:"")
