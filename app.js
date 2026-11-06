@@ -1889,15 +1889,16 @@ function montarShell(){
   + '<div class="painel on" id="painel-tabela">'
   +   '<section class="resumo hidden" id="resumo"></section>'
   +   '<div class="toolbar hidden" id="toolbar">'
-  +     '<div class="dd"><button class="btn" id="bt-colunas">'+icon("table",14)+' Colunas <span class="contador" id="ct-colunas"></span></button>'
-  +       '<div class="pop hidden" id="pop-colunas"><div class="pop-cab">Colunas exibidas na tabela.</div>'
-  +       '<div class="pop-acoes"><button data-cols="todas">Mostrar todas</button><button data-cols="essencial">Só o essencial</button></div>'
-  +       '<div class="pop-lista" id="lista-colunas"></div></div></div>'
   +     '<div class="dd"><button class="btn hidden" id="bt-status">'+icon("flag",14)+' Status <span class="contador" id="ct-status"></span></button>'
   +       '<div class="pop hidden" id="pop-status"><div class="pop-cab">Status exibidos. Nenhum marcado significa <b>todos</b>.</div>'
   +       '<div class="pop-acoes"><button data-st="todos">Marcar todos</button><button data-st="nenhum">Limpar</button></div>'
   +       '<div class="pop-lista" id="lista-status"></div></div></div>'
   +     '<button class="btn hidden" id="bt-limpar">'+icon("x",13)+' Limpar filtros</button>'
+  /* Mesmo botão e mesmo menu de colunas das quatro abas (ver botaoColunas). */
+  +     '<div class="dd"><button class="btn" id="bt-colunas">'+icon("table",14)+' Colunas <span class="contador" id="ct-colunas"></span></button>'
+  +       '<div class="pop hidden" id="pop-colunas"><div class="pop-cab">Colunas desta lista. A escolha é sua e fica salva na sua conta.</div>'
+  +       '<div class="pop-acoes"><button data-cols="padrao">Padrão</button><button data-cols="limpar">Tirar campos extras</button></div>'
+  +       '<div class="pop-lista" id="lista-colunas"></div></div></div>'
   +     '<div class="toolbar-dir"><span id="cont-linhas"></span>'
   +       '<button class="btn" id="bt-export">'+icon("down",14)+' Exportar</button></div>'
   +   '</div>'
@@ -2188,13 +2189,17 @@ function renderToolbar(){
   if(!state.tarefas.length){ el["toolbar"].classList.add("hidden"); return; }
   el["toolbar"].classList.remove("hidden");
 
+  /* Mesmo formato do menu da Checklist e da Homologação: as colunas que a aba
+     mostra de saída e, embaixo, os outros campos do Jira que dá para somar. */
   var vis = colunasVisiveis().length;
-  el["ct-colunas"].textContent = vis+"/"+COLUNAS.length;
-  el["lista-colunas"].innerHTML = COLUNAS.map(function(c){
-    var on = state.ocultas.indexOf(c.id)===-1;
-    return '<button class="pop-item'+(on?" on":"")+'" data-col-tog="'+c.id+'">'
-      + '<span class="chk'+(on?" on":"")+'">'+(on?icon("check",10):"")+'</span>'+esc(c.rot)+'</button>';
-  }).join("");
+  var item = function(c){ return itemColuna("data-col-tog", c.id, c.rot, state.ocultas.indexOf(c.id)===-1); };
+  el["lista-colunas"].innerHTML = '<div class="pop-cab">Desta lista</div>'
+    + COLUNAS.filter(function(c){ return OCULTAS_PADRAO.indexOf(c.id)===-1; }).map(item).join("")
+    + '<div class="pop-cab">Mais campos do Jira</div>'
+    + COLUNAS.filter(function(c){ return OCULTAS_PADRAO.indexOf(c.id)!==-1; }).map(item).join("");
+  var mudou = state.ocultas.length !== OCULTAS_PADRAO.length
+    || state.ocultas.some(function(id){ return OCULTAS_PADRAO.indexOf(id)===-1; });
+  el["ct-colunas"].textContent = mudou ? String(vis) : "";
 
   var sts = statusPresentesTab();
   el["ct-status"].textContent = state.statusSel.length ? state.statusSel.length+"/"+sts.length : "";
@@ -2209,7 +2214,7 @@ function renderToolbar(){
       }).join("")
     : '<div class="pop-cab">Carregue as tarefas para ver os status.</div>';
 
-  el["bt-colunas"].classList.toggle("btn-on", vis < COLUNAS.length);
+  el["bt-colunas"].classList.toggle("btn-on", mudou);
   el["bt-status"].classList.toggle("btn-on", state.statusSel.length>0);
   el["bt-limpar"].classList.toggle("hidden", !temFiltroAtivo());
   ligarPopsTab();
@@ -4289,9 +4294,10 @@ function ligarEventos(){
   el["bt-status"].onclick  = function(e){ e.stopPropagation(); alternarMenuTab("status"); };
   el["pop-colunas"].querySelectorAll("[data-cols]").forEach(function(b){
     b.onclick = function(){
-      state.ocultas = b.getAttribute("data-cols")==="todas" ? []
-        : ["type","priority","dev","ticket","estimativa","versoes","impedida","updated","resolvido","rank"]
-            .concat(["assignee","reporter","creator","analistaReq","analiseTecnica","ux","devOrigem","reqOrigem","testeOrigem","squad","modulo","rotina","impacto","clienteNimitz","origemBug","classifBug","criticidadeBug","bugGerado","classifMelhoria","gerarDpu","iaRequisitos","iaTestes","iaDesenv","motivoReprovT","motivoReprovA","resolucao","catStatus","versaoEntrega","versoesAfet","componentes","etiquetas","pai","tarefaOrigem","branch","motivoReprov","criado","primeiraResp","estDesenv","estRequisitos","estUX","estAnaliseTec","qtdReprov","qtdMotivos","qtdReprovAnt","gut","tempoGasto","razaoTrab"]);
+      /* Padrão: volta às colunas de saída. Tirar campos extras: esconde o que
+         veio do catálogo e mantém a escolha feita nas colunas da lista. */
+      if(b.getAttribute("data-cols")==="padrao") state.ocultas = OCULTAS_PADRAO.slice();
+      else state.ocultas = state.ocultas.concat(OCULTAS_PADRAO.filter(function(id){ return state.ocultas.indexOf(id)===-1; }));
       salvarPref(); renderToolbar(); cabecalho(); renderTabela();
     };
   });
