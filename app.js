@@ -814,7 +814,7 @@ function revivarSeNecessario(){
    replicação automática, que chegava logo depois e subia a página limpa: no
    modo Manual ela nunca sumiu, e desde que a sincronização sem novidade deixou
    de publicar (ver salvarMeta) ela também parou de sumir no automático. */
-var AVISO_OK_MS = 6000;
+var AVISO_OK_MS = 5000;
 var AVISO_SAIDA_MS = 280;
 var avisoTimer = null, avisoSaida = null, avisoGeracao = 0;
 /* A geração invalida uma saída em andamento: se outra mensagem entrar no meio
@@ -984,12 +984,12 @@ function mapear(node){
 function carregarPorJql(base, rotulo, aoTerminar){
   if(!jiraDisponivel()){ avisar("info","Abra Conexão para configurar o Jira. A prévia permite testar os dados salvos."); return; }
   if(state.carregando) return;
-  state.carregando = true; state.cancelar = false;
+  state.carregando = true; state.cancelar = false; state.progresso = 0;
   renderTopo();
   var coletadas = [], vistas = Object.create(null), cursores = Object.create(null);
   function rodada(cursor){
     if(state.cancelar) return Promise.resolve();
-    avisar("info","Carregando "+rotulo+"… "+coletadas.length+" tarefa(s).");
+    state.progresso = coletadas.length; renderTopo();
     return chamarJira(base, "issues", cursor).then(function(r){
       r.nodes.forEach(function(n){
         if(n.key && !vistas[n.key]){ vistas[n.key]=true; coletadas.push(mapear(n)); }
@@ -1002,7 +1002,7 @@ function carregarPorJql(base, rotulo, aoTerminar){
   }
   return rodada(null).then(function(){
     state.carregando = false;
-    if(state.cancelar){ renderTopo(); avisar("info","Carga interrompida. Os dados anteriores foram preservados."); return; }
+    if(state.cancelar){ renderTopo(); avisar("ok","Atualização interrompida. Os dados anteriores foram preservados."); return; }
     window.nimitz.rememberCount(base, coletadas.length);
     aoTerminar(coletadas, coletadas.length, {vazio:!coletadas.length, interrompido:false});
   }).catch(function(err){ state.carregando=false; renderTopo(); avisar("err",msgErro(err)); });
@@ -1021,14 +1021,14 @@ function carregarTudo(){
     salvar();
     inicializarCheck();
     if(info.vazio){
-      avisar("info","O projeto "+PROJETO+" não devolveu nenhuma tarefa.");
+      avisar("ok","O projeto "+PROJETO+" não devolveu nenhuma tarefa.");
     } else if(info.interrompido){
-      avisar("info","Interrompido. "+lista.length+" de "+total+" tarefa(s) carregadas.");
+      avisar("ok","Interrompido. "+lista.length+" de "+total+" tarefa(s) carregadas.");
     } else if(total - lista.length > 0){
       avisar("err","O Jira informou "+total+" tarefa(s), mas só "+lista.length+" voltaram. "
         +"Faltaram "+(total-lista.length)+" — clique em Recarregar para tentar de novo.");
     } else {
-      avisar("ok",lista.length+" tarefa(s) carregadas; todas as páginas da API foram consultadas.");
+      avisar("ok",lista.length.toLocaleString("pt-BR")+" tarefa(s) carregadas.");
     }
     renderTudo();
   });
@@ -1068,10 +1068,10 @@ function chavesDoProjeto(){
   return pagina(null).then(function(){ return {chaves:chaves, total:n}; });
 }
 function conferirTotal(){
-  if(Date.now() - chavesConferidasEm < CONFERIR_CHAVES_MS) return Promise.resolve();
+  if(Date.now() - chavesConferidasEm < CONFERIR_CHAVES_MS) return Promise.resolve("");
   return chavesDoProjeto().then(function(r){
     chavesConferidasEm = Date.now();
-    if(state.carregando) return;
+    if(state.carregando) return "";
     state.total = r.total;
     var aqui = Object.create(null);
     var antes = state.tarefas.length;
@@ -1079,15 +1079,11 @@ function conferirTotal(){
     var saiu = antes - state.tarefas.length;
     var faltam = Object.keys(r.chaves).filter(function(k){ return !aqui[k]; });
     function fechar(novas){
-      if(saiu || novas){
-        salvar(); inicializarCheck();
-        avisar("info", [saiu ? saiu+" tarefa(s) apagada(s) ou movida(s) de projeto saíram da lista" : "",
-                        novas ? novas+" tarefa(s) que faltavam foram trazidas do Jira" : ""]
-                        .filter(Boolean).join("; ")+".");
-        renderTudo();
-      } else renderTopo();
+      if(saiu || novas){ salvar(); inicializarCheck(); renderTudo(); } else renderTopo();
+      return [saiu ? saiu+" saíram (apagadas ou movidas de projeto)" : "",
+              novas ? novas+" que faltavam foram trazidas" : ""].filter(Boolean).join(", ");
     }
-    if(!faltam.length){ fechar(0); return; }
+    if(!faltam.length) return fechar(0);
     var trazidas = [];
     function lote(i){
       if(i >= faltam.length) return Promise.resolve();
@@ -1101,11 +1097,11 @@ function conferirTotal(){
       return pag(null).then(function(){ return lote(i+50); });
     }
     return lote(0).then(function(){
-      if(state.carregando) return;
+      if(state.carregando) return "";
       if(trazidas.length) mesclar(trazidas);
-      fechar(trazidas.length);
+      return fechar(trazidas.length);
     });
-  }).catch(function(e){ console.warn("Não deu para conferir as chaves do projeto:", msgErro(e)); });
+  }).catch(function(e){ console.warn("Não deu para conferir as chaves do projeto:", msgErro(e)); return ""; });
 }
 
 /* Quantos minutos de janela cabem a partir de um carimbo — ou null quando ele
@@ -1140,24 +1136,15 @@ function atualizar(){
 
   carregarPorJql(jqlTudo()+' AND updated >= "-'+minutos+'m"',
     "mudanças desde o último carregamento", function(lista, total, info){
-    if(info.vazio){
-      carimbarGeral();
-      salvar();
-      avisar("ok","Nada mudou no Jira desde o último carregamento.");
-      conferirTotal(); renderTudo();
-      return;
-    }
-    var r = mesclar(lista);
+    var r = info.vazio ? {atualizadas:0, novas:0} : mesclar(lista);
     carimbarGeral();
     salvar();
-    inicializarCheck();
-    revivarSeNecessario();
-    if(info.interrompido){
-      avisar("info","Interrompido. "+lista.length+" de "+total+" mudança(s) aplicadas.");
-    } else {
-      avisar("ok", r.atualizadas+" tarefa(s) atualizada(s), "+r.novas+" nova(s).");
-    }
-    conferirTotal(); renderTudo();
+    if(!info.vazio){ inicializarCheck(); revivarSeNecessario(); }
+    renderTudo();
+    var msg = info.interrompido ? "Interrompido. "+lista.length+" de "+total+" mudança(s) aplicadas"
+      : info.vazio ? "Tudo em dia: nada mudou no Jira"
+      : r.atualizadas+" tarefa(s) atualizada(s), "+r.novas+" nova(s)";
+    conferirTotal().then(function(extra){ avisar("ok", msg + (extra ? "; "+extra : "") + "."); });
   });
 }
 
@@ -1579,7 +1566,10 @@ function renderTopo(){
      Com dados na mão ele pede ao Jira só as tarefas alteradas desde a última
      atualização; sem dados (ou parado há mais de um mês) traz o projeto todo. */
   var incremental = state.tarefas.length>0 && janelaMinutos(state.syncGeral) !== null;
-  el["bt-carregar"].innerHTML = icon("refresh",14,"ic-load"+(state.carregando?" spin":""))+" Atualizar";
+  /* O andamento fica no próprio botão: a faixa de mensagens só mostra o
+     resultado de quem clicou, uma vez, e some sozinha. */
+  el["bt-carregar"].innerHTML = icon("refresh",14,"ic-load"+(state.carregando?" spin":""))
+    + (state.carregando ? " Atualizando…"+(state.progresso ? " "+state.progresso.toLocaleString("pt-BR") : "") : " Atualizar");
   el["bt-carregar"].title = incremental
     ? "Busca no Jira só as tarefas alteradas desde "+fmtDataHora(state.syncGeral)
     : "Traz todas as tarefas do projeto";
@@ -3779,7 +3769,7 @@ function ligarEventos(){
   });
   el["bt-parar"].onclick = function(){
     state.cancelar = true; renderTopo();
-    avisar("info","Interrompendo depois da página atual…");
+    avisar("ok","Interrompendo depois da página atual…");
   };
   (function(){
     var pendente = false;
@@ -4516,11 +4506,11 @@ function conferirComp(inicio){
     var tinha = state.tarefas.length;
     return baixarComp(COMP.pendente).then(function(r){
       if(!r) return;
+      /* Em segundo plano, sem mensagem: a tela só se atualiza. Se a faixa
+         ainda pedia para clicar em Atualizar, ela sai. */
       renderTudo();
       if(COMP.pendente) agendarComp();
-      avisar(inicio ? "info" : "ok", (tinha ? "Dados atualizados" : "Dados carregados")
-        +" do que "+(r.updatedBy || "outra pessoa")+" trouxe do Jira em "+fmtDataHora(r.updatedAt)
-        +(inicio ? ". Atualizar busca só o que mudou depois disso." : "."));
+      if(!tinha && state.aviso && state.aviso.tipo === "info") sumirAviso();
     });
   }).catch(function(err){
     if(!desligarSeSemRota(err)) console.warn("Não deu para consultar os dados compartilhados:", msgErro(err));
