@@ -3,15 +3,7 @@
 
 /* ===================== configuração ===================== */
 var JIRA_BASE = "https://nimitz.atlassian.net/browse/";
-var CLOUD_ID  = "b714d0fb-548f-402c-b3a9-52f92cca708b";
 var PROJETO   = "NMTZ";
-/* Desde 22/10/2026 o conector e o "Atlassian MCP": o antigo ("Atlassian") saiu
-   da instancia e toda chamada voltava 403 "app is not installed". O novo
-   devolve os campos personalizados em fields.customFields (por rotulo, com o
-   id dentro) — chamarJira() os devolve para fields.customfield_*, que e o que
-   mapear() le. O metadado de versoes passa pelo executeRead. */
-var SERVIDOR_PADRAO = "Atlassian MCP";
-var MCP_TOOL  = "searchJiraIssuesUsingJql";
 /* A ÚNICA escrita que este painel faz no Jira, e o ÚNICO campo que ela toca.
    Tudo o mais aqui é leitura. CAMPO_CORRIGIDAS é "Versões corrigidas"
    (fixVersions, lista de versões) — NÃO é "Versão Entrega"
@@ -20,19 +12,7 @@ var MCP_TOOL  = "searchJiraIssuesUsingJql";
    o Eduardo corrigiu o pedido: o campo certo sempre foi Versões corrigidas.
    Nunca acrescentar campo a gravarVersoesCorrigidas(): a autorização é nominal
    a este. Campo novo = decisão nova. */
-var MCP_TOOL_EDIT = "editJiraIssue";
 var CAMPO_CORRIGIDAS = "fixVersions";
-/* Leitura (não escrita) das versões PERMITIDAS no campo, com o flag released:
-   é daqui que saem as versões ainda não lançadas, que nenhuma tarefa carrega e
-   por isso nunca apareciam no seletor. O metadado do tipo Bug tem 63 campos e
-   ~670 KB (o Cliente sozinho pesa 275 KB); pedindo SÓ a posição do
-   fixVersions vem pouco. Os campos vêm em ordem alfabética da chave, e
-   fixVersions estava na 54 em 28/09/2026. A posição é conferida pelo fieldId
-   — se mudar, varre. */
-var MCP_TOOL_META = "getJiraIssueTypeMetaWithFields";
-var META_TIPO = "10004";
-var META_POS = 54;
-
 /* Chaves próprias: o Painel de Tarefas usa o prefixo "nmtz:". Se os dois
    painéis compartilharem a mesma origem de armazenamento, reaproveitar as
    chaves faria um sobrescrever o cache do outro. */
@@ -244,6 +224,12 @@ function parseData(v){
   return Number.isNaN(t) ? null : new Date(t);
 }
 function fmtData(v){ var d=parseData(v); return d? p2(d.getDate())+"/"+p2(d.getMonth()+1)+"/"+String(d.getFullYear()).slice(2) : ""; }
+/* Tipo com cor própria nas quatro abas: Bug e Melhoria em etiqueta, o resto discreto. */
+function tipoTag(tipo){
+  var n = norm(tipo);
+  var cls = n === "bug" ? "tipo tipo-bug" : n === "melhoria" ? "tipo tipo-melhoria" : "tipo tipo-outro";
+  return tipo ? '<span class="'+cls+'">'+esc(tipo)+'</span>' : "";
+}
 function fmtDataHora(v){
   var d=parseData(v); if(!d) return "";
   return p2(d.getDate())+"/"+p2(d.getMonth()+1)+"/"+d.getFullYear()+" "+p2(d.getHours())+":"+p2(d.getMinutes());
@@ -565,7 +551,6 @@ function salvar(){
   } else {
     guardou = false;
   }
-  marcarSujo();
   agendarComp();
   return guardou;
 }
@@ -586,16 +571,9 @@ function salvarPref(){
     colunas:state.colunas, statusSel:state.statusSel, hgSort:state.hgSort})); }catch(e){}
   salvarColunasServidor();
 }
-/* Assinatura do recorte que é do time. Sem ela, cada clique em "dispensar" —
-   que é decisão pessoal e não vai para ninguém — agendaria uma replicação, e
-   com ela um recarregamento de tela, sem nada novo para publicar. */
-var ASSINATURA_TIME = null;
-function relerAssinatura(){ ASSINATURA_TIME = JSON.stringify(checkDoTime()); }
 function salvarCheck(){
   try{ localStorage.setItem(LS_CHECK, JSON.stringify(state.check)); }
   catch(e){ avisar("err","Não deu pra guardar a checklist no armazenamento local."); }
-  var agora = JSON.stringify(checkDoTime());
-  if(agora !== ASSINATURA_TIME){ ASSINATURA_TIME = agora; marcarSujo(); }
 }
 function atualizarCheck(patch){
   if(typeof patch === "function") patch = patch(state.check);
@@ -619,12 +597,6 @@ function carregarLocal(){
       if(d.tarefas) state.tarefas = expandirTarefas(d.tarefas);
       if(typeof d.total === "number") state.total = d.total;
     }
-  }catch(e){}
-  /* Antes da adoção: é o que permite ao modoPendente sobreviver à recarga e
-     barrar o modo que vem no pacote. */
-  try{
-    var md = localStorage.getItem(LS_MODO);
-    if(md === "auto" || md === "manual"){ REPLICA.modoPendente = md; REPLICA.modo = md; }
   }catch(e){}
   try{
     var pp = JSON.parse(localStorage.getItem(LS_PESSOA)||"null");
@@ -691,15 +663,6 @@ function versoesPresentes(){
   state.tarefas.forEach(function(t){ versoesDe(t).forEach(function(v){ s[v]=true; }); });
   return Object.keys(s).sort(function(a,b){ return b.localeCompare(a,"pt-BR"); });
 }
-function pessoasPresentes(){
-  var s = {};
-  state.tarefas.forEach(function(t){ if(t.testAnalyst) s[t.testAnalyst]=true; });
-  return Object.keys(s).sort(function(a,b){ return a.localeCompare(b,"pt-BR"); });
-}
-function tarefasDaPessoa(){
-  if(state.pessoa === TODOS) return state.tarefas.slice();
-  return state.tarefas.filter(function(t){ return (t.testAnalyst||SEM_PESSOA) === state.pessoa; });
-}
 /* Conjunto base da aba corrente: Tarefas vê tudo; Versões vê o recorte. */
 /* Valor de uma coluna como ela aparece na tela — é sobre esse texto que o
    filtro da coluna decide, senão "Interna" e "23/09/26" nunca casariam. */
@@ -742,10 +705,13 @@ function normalizarFiltros(){
   COLUNAS.forEach(function(c){
     var v = state.filtros[c.id];
     if(c.tipo==="multi" && typeof v === "string") state.filtros[c.id] = v ? v.split(", ") : [];
+    if(c.tipo==="enum" && typeof v === "string") state.filtros[c.id] = v ? [v] : [];
   });
 }
 function colunasVisiveis(){
-  var v = COLUNAS.filter(function(c){ return state.ocultas.indexOf(c.id)===-1; });
+  var v = ordenarColunas(abaDaTabela(), COLUNAS.map(function(c){ return c.id; }))
+    .map(function(id){ return COLUNA_POR_ID[id]; })
+    .filter(function(c){ return c && state.ocultas.indexOf(c.id)===-1; });
   return v.length ? v : [COLUNAS[0]];   // nunca deixa a tabela sem nenhuma coluna
 }
 function statusPresentesTab(){
@@ -900,50 +866,9 @@ function avisar(tipo, texto){
 
 /* ===================== Jira ===================== */
 function jiraDisponivel(){ return window.nimitz.connected && !window.nimitz.preview; }
-var TIMEOUT_JIRA_MS = 45000;
 
-function comTimeout(promessa, oque){
-  var t = null;
-  function limpar(){ if(t !== null){ clearTimeout(t); t = null; } }
-  return Promise.race([
-    promessa,
-    new Promise(function(_, rejeitar){
-      t = setTimeout(function(){
-        rejeitar({code:"timeout", retryable:true,
-          message:"O Jira não respondeu em "+Math.round(TIMEOUT_JIRA_MS/1000)+"s ("+oque+")."});
-      }, TIMEOUT_JIRA_MS);
-    })
-  /* O timer morre nos DOIS desfechos: deixado vivo, ele seguraria o processo e
-     ainda rejeitaria uma corrida que ja terminou. */
-  ]).then(function(r){ limpar(); return r; },
-          function(e){ limpar(); throw e; });
-}
 
-var servidorJira = null;
-function resolverServidor(){ return Promise.resolve("REST"); }
 
-function detalheJira(txt){
-  var s = String(txt == null ? "" : txt).trim();
-  for(var i=0;i<3 && s.charAt(0)==="{";i++){
-    var o = null;
-    try{ o = JSON.parse(s); }catch(e){ o = null; }
-    if(o && typeof o.message === "string"){ s = o.message.trim(); continue; }
-    break;
-  }
-  // O ultimo nivel traz o motivo real ("The JQL query is invalid") dentro de um
-  // {"code":...}. Descartar o bloco inteiro jogaria fora justamente isso, entao
-  // o que sai e o prefixo mais esse motivo, sem chave nenhuma.
-  var m = s.match(/^([\s\S]*?)\s*(\{\s*"code"[\s\S]*\})\s*$/);
-  if(m){
-    var det = "";
-    try{
-      var o2 = JSON.parse(m[2]);
-      if(o2 && typeof o2.message === "string") det = o2.message.trim();
-    }catch(e){ det = ""; }
-    s = det ? m[1].replace(/[.\s]+$/, "") + " — " + det : m[1].trim();
-  }
-  return s.replace(/[.\s]+$/, "");
-}
 
 function msgErro(err){ return (err && err.message) || "Não foi possível consultar o Jira."; }
 
@@ -1256,7 +1181,7 @@ function filtradas(){
         continue;
       }
       var alvo = valorDaColuna(t, c.id);
-      if(c.tipo==="enum"){ if(alvo!==v) return false; }
+      if(c.tipo==="enum"){ if((Array.isArray(v) ? v : [v]).indexOf(alvo)===-1) return false; }
       else if(norm(alvo).indexOf(norm(v))===-1) return false;
     }
     return true;
@@ -1301,67 +1226,15 @@ function ordenadas(lista){
     return String(va).localeCompare(String(vb),"pt-BR")*dir;
   });
 }
-function valoresDe(campo){
-  var s = {};
-  tarefasDaAba().forEach(function(t){
-    var v = valorDaColuna(t, campo);
-    if(v) s[v] = true;
-  });
-  return Object.keys(s).sort(function(a,b){ return a.localeCompare(b,"pt-BR"); });
-}
 
 
-/* ===================== replicação (window.claude.self) =====================
-   O painel guarda o próprio fonte num <textarea id="fonte-modelo"> e o estado
-   compartilhado num <script id="estado-replicado">. Replicar = renderizar o
-   documento completo a partir do modelo, trocando só o bloco de estado, e
-   publicá-lo como nova versão do artefato. Toda view aberta recarrega nela.
-
-   O modelo NÃO é lido do DOM ao vivo (viria contaminado com estado de sessão
-   e com os scripts do runtime); ele é texto guardado, idêntico ao publicado. */
-
-/* modo: "manual" (padrão) ou "auto" — quem manda é o pacote, ver aplicarReplicado().
-   geracao conta as mudanças: é ela que diz se algo mexeu DEPOIS do retrato que
-   subiu, e portanto se a pendência pode ser dada por resolvida na volta. */
-var REPLICA = {sujo:false, publicando:false, somenteLeitura:false, aplicando:false, carimbo:null,
-               modo:"manual", geracao:0,
-               /* O modo escolhido AQUI que ainda não viajou no pacote. Enquanto
-                  existe, a adoção não o sobrescreve — passar para manual sem
-                  publicar seria inútil se o primeiro pacote a chegar devolvesse
-                  o automático. Sai quando uma publicação leva o modo junto. */
-               modoPendente:null};
+/* ===================== prévia e retomada =====================
+   A prévia local (?preview=1) entrega um pacote no <script id="estado-replicado">;
+   aplicarReplicado() o adota. A equipe recebe os dados pelo compartilhamento
+   do servidor (ver "dados compartilhados"), não por aqui. */
+var REPLICA = {aplicando:false, carimbo:null};
 var LS_CARIMBO = window.nimitz.storagePrefix+"carimboReplica";
-var LS_MODO = window.nimitz.storagePrefix+"modoPendente";
 var LS_RETOMAR = window.nimitz.storagePrefix+"retomar";
-
-/* ---------- quando se publica: manual ou automático ----------
-   Cada publicação RECARREGA esta view e todas as outras — o contrato do
-   artefato é explícito: "treat publish as the last act of an interaction" — e
-   publicar demais volta com rate_limited.
-
-   Por isso o padrão é MANUAL: nada sai sem clique em Replicar. O automático
-   recarregava a tela no meio da arrumação, e arrastar a ordem das tarefas
-   virava briga: a recarga chegava com o retrato de antes dos últimos arrastes
-   e a ordem parecia voltar sozinha.
-
-   No AUTO as mudanças se juntam e vão embora ESPERA_AUTO depois da última, com
-   um teto para quem fica mexendo sem parar.
-
-   A chave Manual/Auto fica no cabeçalho e VIAJA NO PACOTE: ela é do time, como
-   a ordem. Tinha de ser — quem recarrega a sua tela é quem publica, então uma
-   chave só desta máquina não protegeria de nada. */
-var ESPERA_AUTO = 2500;    // silêncio necessário antes de publicar
-var TETO_AUTO   = 20000;   // espera acumulada máxima
-var ESPERA_LIMITE = 60000; // recuo depois de um rate_limited
-var ESPERA_RECARGA = 8000; // se a recarga pós-publicação não vier, destrava a view
-var AUTO = {timer:null, desde:0, tentouDeNovo:false};
-var BARRA = String.fromCharCode(92);
-/* Montados por concatenacao de proposito: escritos por extenso, o replace
-   abaixo acertaria esta linha em vez do marcador real do documento. */
-var MARCA_ESTADO = "<!--" + "ESTADO" + "-->";
-var MARCA_MODELO = "<!--" + "MODELO" + "-->";
-
-function selfDisponivel(){ return false; }
 
 /* O que viaja para todo mundo — e, principalmente, o que NÃO viaja:
      - preferência de quem está olhando: aba, busca, filtros da tabela, versão
@@ -1403,37 +1276,6 @@ function checkDoTime(c){
   CAMPOS_CHECK_TIME.forEach(function(k){ if(c[k] !== undefined) o[k] = c[k]; });
   return o;
 }
-/* O servidor recusa a publicacao do proprio documento perto de 5,2 MB (a
-   replicacao voltava como "pagina recusada" e o painel parava de atualizar).
-   As Finalizadas eram 2/3 das tarefas e a maior parte do pacote, entao so as
-   resolvidas ha mais de DIAS_FINALIZADA_NO_PACOTE dias ficam de fora do que
-   viaja. O corte e SO do pacote: state.tarefas local segue inteiro. Tarefa
-   sem data nenhuma fica (nao da para saber que e antiga). */
-var DIAS_FINALIZADA_NO_PACOTE = 90;
-function tarefasParaReplicar(){
-  var corte = new Date(Date.now() - DIAS_FINALIZADA_NO_PACOTE*86400000).toISOString().slice(0,10);
-  return state.tarefas.filter(function(t){
-    if(norm(t.status) !== "finalizada") return true;
-    var d = String(t.resolvido || t.updated || "").slice(0,10);
-    return !d || d >= corte;
-  });
-}
-function estadoParaReplicar(){
-  return {
-    carimbo: new Date().toISOString(),
-    modo: REPLICA.modo,
-    tarefas: compactarTarefas(tarefasParaReplicar()),
-    total: state.total,
-    ultimoSync: state.ultimoSync,
-    /* Os carimbos de frescor viajam: a pessoa que o colega acabou de
-       sincronizar chega aqui sincronizada, e a próxima janela dela nasce
-       curta em vez de refazer o que ele já fez. */
-    syncGeral: state.syncGeral,
-    syncPessoa: state.syncPessoa,
-    check: checkDoTime()
-  };
-}
-
 function lerEstadoReplicado(){
   var no = document.getElementById("estado-replicado");
   if(!no) return null;
@@ -1443,130 +1285,35 @@ function lerEstadoReplicado(){
   catch(e){ return null; }
 }
 
-/* Adota o estado replicado quando ele mudou desde a última vez que ESTA
-   máquina o viu. Assim quem abre recebe o que foi replicado, e quem está
-   editando localmente não é atropelado por um retrato que já conhecia. */
+/* Adota o pacote quando ele mudou desde a última vez que este navegador o viu.
+   "Já vi" só pula a adoção se as tarefas estiverem de fato aqui: o cache local
+   pode não caber na cota do navegador. */
 function aplicarReplicado(){
   var rep = lerEstadoReplicado();
   if(!rep) return;
   var visto = null;
   try{ visto = localStorage.getItem(LS_CARIMBO); }catch(e){}
   REPLICA.carimbo = rep.carimbo;
-  /* O modo é lido ANTES de qualquer desvio: mesmo quando a adoção é pulada,
-     esta view precisa saber se o time combinou manual ou automático. */
-  /* Escolha local ainda não publicada vence o pacote: ver REPLICA.modoPendente. */
-  if(!REPLICA.modoPendente && (rep.modo === "auto" || rep.modo === "manual")) REPLICA.modo = rep.modo;
-  /* "Já vi este carimbo" só autoriza pular a adoção se o pacote realmente
-     estiver aqui. O cache local pode não ter caber — o pacote compacto ainda
-     passa da cota do navegador, que conta em UTF-16 — e antes disso bastava
-     para o painel subir VAZIO com os dados ali na própria página. Readotar do
-     documento é de graça: ele já veio inteiro no bloco de estado. */
   if(visto === rep.carimbo && state.tarefas.length) return;
-
-  var sobrou = false;
   REPLICA.aplicando = true;
   try{
     if(rep.tarefas) state.tarefas = expandirTarefas(rep.tarefas);
     if(typeof rep.total === "number") state.total = rep.total;
     if(rep.ultimoSync) state.ultimoSync = rep.ultimoSync;
-    /* Vêm do pacote e NÃO se mesclam com os daqui: state.tarefas acabou de ser
-       substituído pelo conjunto dele, então um carimbo local mais recente
-       passaria a prometer um frescor que ESTE conjunto não tem — e a janela
-       seguinte começaria depois de uma mudança que nunca chegou. Trocar por um
-       carimbo mais antigo só custa uma janela maior. Pacote de uma versão
-       anterior do painel não traz os campos: o ultimoSync faz as vezes do
-       geral, como antes deles. */
     state.syncGeral = rep.syncGeral || rep.ultimoSync || null;
     state.syncPessoa = (rep.syncPessoa && typeof rep.syncPessoa === "object")
       ? Object.assign({}, rep.syncPessoa) : {};
     /* Só o recorte do time entra; dispensadas/mantidas/revividas seguem
-       sendo as desta máquina. */
-    BASE_TIME = rep.check ? checkDoTime(rep.check) : {};
-    var doTime = Object.assign({}, BASE_TIME);
-    /* Mescla campo a campo o que esta máquina tinha pendente quando a recarga
-       chegou (ver guardarRetomada). Sem isto o pacote sobrescreve em silêncio a
-       ordem que alguém acabou de arrastar e ainda não publicou — era o outro
-       lado do problema do arraste, e no manual pesa mais, porque a pendência
-       fica aqui esperando o clique. Campo que mudou aqui desde a última adoção
-       vence e segue pendente; campo intocado é o do pacote, para não atropelar
-       o que o colega publicou. */
-    var pend = pendenciaGuardada();
-    if(pend){
-      CAMPOS_CHECK_TIME.forEach(function(k){
-        var meu = pend.pend[k];
-        if(meu === undefined) return;
-        var txt = JSON.stringify(meu);
-        /* O pacote já traz o que eu tinha: foi a MINHA publicação que voltou.
-           Sem esta linha a view renasceria com pendência falsa — e no auto
-           publicaria de novo, em círculo. */
-        if(txt === JSON.stringify(BASE_TIME[k])) return;
-        if(txt === JSON.stringify(pend.base ? pend.base[k] : undefined)) return;
-        doTime[k] = meu;
-        sobrou = true;
-      });
-    }
-    if(rep.check || sobrou) state.check = Object.assign({}, CHECK_VAZIO, state.check, doTime);
+       sendo as deste navegador. */
+    if(rep.check) state.check = Object.assign({}, CHECK_VAZIO, state.check, checkDoTime(rep.check));
     var guardou = salvar();
     salvarCheck();
-    /* Sem o pacote guardado, marcar o carimbo faria a próxima abertura pular
-       esta adoção e subir vazia. Não marcando, ela readota daqui — que é de
-       graça, o pacote está no documento. */
     if(guardou){ try{ localStorage.setItem(LS_CARIMBO, rep.carimbo); }catch(e){} }
   } finally { REPLICA.aplicando = false; }
-  /* Só zera a pendência se nada local sobreviveu à mescla. */
-  REPLICA.sujo = sobrou;
-  if(sobrou){
-    REPLICA.geracao++;
-    if(REPLICA.modo === "auto") agendarReplicacao();
-  }
 }
 
-function marcarSujo(){
-  if(REPLICA.aplicando) return;
-  REPLICA.sujo = true;
-  REPLICA.geracao++;
-  /* Marca mesmo durante a publicação. Antes saía fora daqui, e o que alguém
-     mexesse enquanto o pacote subia não ficava pendente nem ia no retrato: a
-     recarga chegava com o estado anterior e a mudança desaparecia sem aviso. */
-  if(REPLICA.modo === "auto" && !REPLICA.publicando) agendarReplicacao();
-  if(el["bt-replicar"]) renderReplicar();
-}
-
-function cancelarAgenda(){
-  if(AUTO.timer){ clearTimeout(AUTO.timer); AUTO.timer = null; }
-  AUTO.desde = 0;
-}
-/* Só o modo automático agenda por mudança (ver marcarSujo). No manual isto
-   ainda roda, mas apenas como nova tentativa de uma publicação que já foi
-   pedida no clique e falhou — o que é retomar a ação de alguém, não publicar
-   por conta própria. */
-function agendarReplicacao(){
-  if(REPLICA.somenteLeitura || REPLICA.publicando || !selfDisponivel()) return;
-  var agora = Date.now();
-  if(!AUTO.desde) AUTO.desde = agora;
-  if(AUTO.timer) clearTimeout(AUTO.timer);
-  // O teto impede que uma sequência longa de mudanças adie a publicação para sempre.
-  var espera = Math.min(ESPERA_AUTO, Math.max(0, AUTO.desde + TETO_AUTO - agora));
-  AUTO.timer = setTimeout(function(){
-    AUTO.timer = null;
-    /* Carregamento em andamento adia: publicar no meio da paginação poria no
-       ar um pacote pela metade. */
-    if(state.carregando){ agendarReplicacao(); return; }
-    if(!REPLICA.sujo || REPLICA.publicando || REPLICA.somenteLeitura){ cancelarAgenda(); return; }
-    cancelarAgenda();
-    replicar();
-  }, espera);
-}
-
-/* Uma publicação recarrega TODAS as views, não só a de quem publicou. Então o
-   lugar em que cada pessoa estava precisa estar guardado ANTES da recarga —
-   e não dá para guardá-lo na hora de publicar, porque quem está só olhando
-   nunca passa por ali. Quem chama isto é o pagehide, que o navegador dispara
-   em qualquer recarga, seja ela de quem for (ver iniciarReplicacao).
-
-   "O lugar" é tudo o que é preferência de quem olha e não viaja no pacote:
-   a aba, as duas buscas, os filtros por coluna, a fase escolhida no resumo e
-   as duas rolagens. Versão e analista selecionados não entram aqui porque já
+/* Onde a pessoa estava (aba, buscas, filtros, fase e rolagens) fica guardado
+   na saída da página e volta depois do F5. Versão e analista escolhidos já
    ficam no localStorage, por salvarPref(). */
 function guardarRetomada(){
   try{
@@ -1579,27 +1326,9 @@ function guardarRetomada(){
            verFora:state.hgVerFora},
       rolagemHg: el["hg-list"] ? el["hg-list"].scrollTop : 0,
       rolagem: el["cl-list"] ? el["cl-list"].scrollTop : 0,
-      rolagemTab: el["scroll"] ? el["scroll"].scrollTop : 0,
-      /* O que é do time e ainda não foi publicado vai junto, com a base em que
-         começou: aplicarReplicado() mescla campo a campo na volta. Senão a
-         recarga — inclusive a que vem da publicação de um colega — sobrescreve
-         a arrumação que ainda não saiu daqui. */
-      pend: REPLICA.sujo ? checkDoTime() : null,
-      base: REPLICA.sujo ? BASE_TIME : null
+      rolagemTab: el["scroll"] ? el["scroll"].scrollTop : 0
     }));
   }catch(e){}
-}
-/* O recorte de time como ele veio no último pacote adotado (ou como acabou de
-   ser publicado): é a base contra a qual se decide, na recarga, quais campos
-   esta máquina mexeu e ainda não replicou. */
-var BASE_TIME = null;
-/* Lê a pendência sem consumir: quem apaga a chave é lerRetomada(), que roda
-   depois, em iniciarReplicacao(). */
-function pendenciaGuardada(){
-  try{
-    var o = JSON.parse(sessionStorage.getItem(LS_RETOMAR)||"null");
-    return (o && o.pend) ? o : null;
-  }catch(e){ return null; }
 }
 
 var RETOMADA = null;
@@ -1615,7 +1344,7 @@ function lerRetomada(){
   if(typeof RETOMADA.clBusca === "string") state.clBusca = RETOMADA.clBusca;
   if(RETOMADA.fase) state.fase = RETOMADA.fase;
   /* Antes do render: a linha de filtros do cabeçalho é montada a partir de
-     state.filtros, então restaurar aqui já devolve o que estava escrito. */
+     state.filtros, então restaurar aqui já devolve o que estava escolhido. */
   if(RETOMADA.filtros && typeof RETOMADA.filtros === "object"){ state.filtros = RETOMADA.filtros; normalizarFiltros(); }
   var hg = RETOMADA.hg;
   if(hg && typeof hg === "object"){
@@ -1637,219 +1366,9 @@ function aplicarRetomada(){
   if(el["scroll"] && RETOMADA.rolagemTab) el["scroll"].scrollTop = RETOMADA.rolagemTab;
   RETOMADA = null;
 }
-
-/* Dentro de <textarea> só o & e o < precisam sair de cena; o parser devolve
-   o texto decodificado, então a volta é exata. */
-function escaparModelo(s){
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");
-}
-
-function renderizarDocumento(estado){
-  var no = document.getElementById("fonte-modelo");
-  if(!no) return null;
-  var modelo = no.textContent;
-  if(!modelo || modelo.indexOf(MARCA_ESTADO)===-1 || modelo.indexOf(MARCA_MODELO)===-1) return null;
-
-  /* Escapar < no JSON impede que um fechamento de script vindo de um dado
-     (resumo de tarefa, nome de cliente) encerre o bloco antes da hora. */
-  var blocoEstado = '<script id="estado-replicado" type="application/json">'
-    + JSON.stringify(estado).replace(/</g, function(){ return BARRA + "u003c"; }) + '<\/script>';
-  var blocoModelo = '<textarea id="fonte-modelo" hidden>' + escaparModelo(modelo) + '<\/textarea>';
-
-  /* Substituição por função: o conteúdo pode conter $& e afins, que na forma
-     de string seriam interpretados como padrão de substituição. */
-  return modelo
-    .replace(MARCA_ESTADO, function(){ return blocoEstado; })
-    .replace(MARCA_MODELO, function(){ return blocoModelo; });
-}
-
-function virarSomenteLeitura(msg){
-  REPLICA.somenteLeitura = true;
-  renderReplicar();
-  avisar("info", msg);
-}
-
-function replicar(){
-  if(REPLICA.publicando || REPLICA.somenteLeitura) return;
-  if(!selfDisponivel()){
-    avisar("err","Este navegador não expõe a publicação do artefato. Recarregue a página pelo claude.ai.");
-    return;
-  }
-  var html = renderizarDocumento(estadoParaReplicar());
-  if(!html){
-    avisar("err","Não achei o modelo do próprio fonte na página — replicação indisponível nesta versão.");
-    return;
-  }
-
-  /* O pacote carrega o projeto inteiro, entao o tamanho importa. O limiar fica
-     perto do teto real (16 MB) e nao em qualquer pacote grande: com a
-     replicacao automatica, um aviso a cada publicacao seria so ruido — quem
-     precisa reclamar de tamanho e o erro too_large, tratado abaixo. */
-  var mb = html.length / 1048576;
-  if(mb > 12) avisar("info", "O pacote está em "+mb.toFixed(1)+" MB, perto do limite de publicação. "
-    + "Se começar a ser recusado por tamanho, carregue um recorte menor do projeto.");
-
-  REPLICA.publicando = true;
-  /* O retrato que está subindo e a geração em que ele foi tirado: é o que
-     permite saber, na volta, se ainda ficou algo pendente. */
-  var enviado = checkDoTime();
-  var geracao = REPLICA.geracao;
-  cancelarAgenda();
-  renderReplicar();
-  guardarRetomada();
-
-  window.claude.self.publish(html).then(function(){
-    /* O normal é o recarregamento chegar com a versão nova, e nada mais rodar
-       aqui. Mas se ele não vier, esta view não pode ficar presa em
-       "Replicando…": no automático, uma única publicação sem recarga
-       desligaria tudo em silêncio, sem ninguém perceber. */
-    BASE_TIME = enviado;
-    /* O modo acabou de viajar no pacote: a escolha deixa de ser só local e a
-       adoção volta a mandar nela. */
-    limparModoPendente();
-    /* Nem sempre zera: quem mexeu na tela enquanto isto subia mudou a geração,
-       e essa mudança não está no pacote que acabou de sair. */
-    if(REPLICA.geracao === geracao) REPLICA.sujo = false;
-    AUTO.tentouDeNovo = false;
-    setTimeout(function(){
-      if(!REPLICA.publicando) return;
-      REPLICA.publicando = false;
-      renderReplicar();
-      if(REPLICA.sujo && REPLICA.modo === "auto") agendarReplicacao();
-    }, ESPERA_RECARGA);
-  }).catch(function(err){
-    REPLICA.publicando = false;
-    var cod = (err && err.code) || "upstream_error";
-    if(cod === "conflict"){
-      /* Rotineiro: alguém publicou antes. A view já está recarregando. */
-      return;
-    }
-    if(cod === "not_writer" || cod === "not_granted" || cod === "consent_required" ||
-       cod === "not_declared" || cod === "capability_disabled" || cod === "capability_removed"){
-      virarSomenteLeitura("Você está vendo este painel em modo leitura — só quem tem acesso de escrita ao artefato consegue replicar.");
-      return;
-    }
-    if(cod === "too_large"){
-      avisar("err","O conteúdo ficou grande demais para publicar ("+mb.toFixed(1)+" MB). Carregue um recorte menor antes de replicar.");
-    } else if(cod === "rate_limited"){
-      /* Nunca insistir em loop: recua bem mais que o debounce e manda tudo
-         de uma vez. As alterações continuam aqui, marcadas como pendentes. */
-      avisar("info","Muitas replicações em pouco tempo. Vou juntar as alterações e publicar em cerca de um minuto.");
-      cancelarAgenda();
-      AUTO.timer = setTimeout(function(){ AUTO.timer = null; agendarReplicacao(); }, ESPERA_LIMITE);
-    } else if(cod === "invalid_content" || cod === "transform_error"){
-      avisar("err","A página gerada foi recusada pelo servidor. Nada foi publicado.");
-    } else {
-      avisar("err","Falha ao replicar: "+((err && err.message) || cod)+". Nada foi publicado.");
-      /* upstream_error e afins: o contrato permite UMA nova tentativa, depois
-         de um instante e com folga aleatória para não sincronizar com as
-         outras views que estejam tentando ao mesmo tempo. */
-      if(!AUTO.tentouDeNovo){
-        AUTO.tentouDeNovo = true;
-        cancelarAgenda();
-        AUTO.timer = setTimeout(function(){ AUTO.timer = null; agendarReplicacao(); },
-                                4000 + Math.floor(Math.random()*4000));
-      }
-    }
-    renderReplicar();
-  });
-}
-
-/* Botão e indicador na mesma peça. No manual é ele quem publica, e o amarelo
-   de "Replicar agora" é o aviso de que o time ainda não vê o que está aqui. No
-   automático ele vira só indicador — e é o único aviso visível de que a página
-   vai recarregar. Desaparece para quem só tem acesso de leitura, e fica
-   clicável apenas quando há algo pendente. */
-function renderReplicar(){
-  renderModoReplica();
-  var b = el["bt-replicar"];
-  if(!b) return;
-  if(REPLICA.somenteLeitura || !selfDisponivel()){ b.classList.add("hidden"); return; }
-  b.classList.remove("hidden");
-  var pendente = REPLICA.sujo && !REPLICA.publicando;
-  b.disabled = !pendente;
-  b.classList.toggle("btn-on", pendente);
-  if(REPLICA.publicando){
-    b.innerHTML = icon("up",14,"ic-rep spin")+" Replicando…";
-    b.title = "Publicando para o time. A página recarrega sozinha quando terminar.";
-  } else if(pendente){
-    b.innerHTML = icon("up",14,"ic-rep")+" Replicar agora";
-    b.title = REPLICA.modo === "auto"
-      ? "As alterações vão para o time sozinhas em instantes. Clique para publicar já."
-      : "O time ainda não vê estas alterações — elas só saem daqui neste clique.";
-  } else {
-    b.innerHTML = icon("check",14,"ic-rep")+" Replicado";
-    b.title = "Tudo o que é do time está publicado. Filtros, busca e as suas marcações pessoais não entram no pacote.";
-  }
-}
-
-/* A chave só aparece para quem pode publicar: ela é uma combinação do time, e
-   quem está em modo leitura não tem como levá-la a ninguém. */
-function renderModoReplica(){
-  var cx = el["seg-modo"];
-  if(!cx) return;
-  if(REPLICA.somenteLeitura || !selfDisponivel()){ cx.classList.add("hidden"); return; }
-  cx.classList.remove("hidden");
-  var auto = REPLICA.modo === "auto";
-  el["bt-modo-manual"].classList.toggle("on", !auto);
-  el["bt-modo-auto"].classList.toggle("on", auto);
-  el["bt-modo-manual"].title = "Nada é publicado sem clique em Replicar. Ninguém do time tem a tela "
-    + "recarregada no meio de uma arrumação — é o modo para mexer na ordem das tarefas.";
-  el["bt-modo-auto"].title = "Publica sozinho poucos segundos depois de cada mudança. Cada publicação "
-    + "recarrega a tela de todo o time, inclusive no meio de um arraste.";
-}
-
-function guardarModoPendente(modo){
-  REPLICA.modoPendente = modo;
-  try{ localStorage.setItem(LS_MODO, modo); }catch(e){}
-}
-function limparModoPendente(){
-  REPLICA.modoPendente = null;
-  try{ localStorage.removeItem(LS_MODO); }catch(e){}
-}
-
-/* Os dois sentidos NÃO são simétricos, e é de propósito.
-   LIGAR o automático publica na hora: dali em diante toda mudança recarrega a
-   tela de todo mundo, e o time precisa saber disso sem depender de um clique
-   que talvez não venha.
-   DESLIGAR não publica. "Manual" quer dizer que nada sai daqui sem clique, e
-   despejar o acervo inteiro como último ato do automático contradiz exatamente
-   o que se acabou de pedir — era o que acontecia: clicar em Manual publicava
-   tudo antes de parar. O modo fica pendente e viaja no próximo Replicar, junto
-   com o que já estava para subir; até lá REPLICA.modoPendente segura a escolha
-   contra as adoções.
-   A ordem importa: o modo muda ANTES de marcarSujo(), senão a marcação ainda
-   agendaria uma publicação automática; e cancelarAgenda() vem depois, para
-   matar o temporizador que já estivesse correndo de uma mudança anterior. */
-function trocarModo(modo){
-  if(modo !== "auto" && modo !== "manual") return;
-  if(REPLICA.modo === modo || REPLICA.publicando || REPLICA.somenteLeitura) return;
-  REPLICA.modo = modo;
-  marcarSujo();
-  cancelarAgenda();
-  guardarModoPendente(modo);
-  renderModoReplica();
-  /* Sem aviso ao desligar: a chave já mostra Manual e o botão Replicar já diz
-     que há pendência. Texto na barra depois de um clique explícito só repete o
-     que a tela mostra, e ainda empurra para baixo o que estava sendo lido. */
-  if(modo === "auto") replicar();
-}
-
-function iniciarReplicacao(){
-  if(el["bt-replicar"]) el["bt-replicar"].addEventListener("click", replicar);
-  ["bt-modo-manual","bt-modo-auto"].forEach(function(id){
-    if(!el[id]) return;
-    el[id].addEventListener("click", function(){ trocarModo(el[id].getAttribute("data-modo")); });
-  });
-  /* O ponto que faz a recarga de outra pessoa ser indolor: o pagehide dispara
-     em qualquer recarga desta view — inclusive na que o runtime provoca quando
-     ALGUÉM publica —, e é a única chance de quem só está olhando guardar onde
-     estava. Registrado sempre, mesmo sem permissão de publicar: quem só lê é
-     justamente quem mais é recarregado por terceiros. */
+function iniciarRetomada(){
   addEventListener("pagehide", guardarRetomada);
   lerRetomada();
-  relerAssinatura();
-  renderReplicar();
 }
 
 /* ===================== render ===================== */
@@ -1866,19 +1385,8 @@ function montarShell(){
   +     '<button class="aba-btn" data-aba="homolog">'+icon("flask",14)+' Homologação <span class="badge hidden" id="badge-hg">0</span></button>'
   +     '<button class="aba-btn" data-aba="ponto">'+icon("clock",14)+' Registro <span id="ponto-timer-badge" class="badge" hidden></span></button>'
   +   '</nav>'
-  +   '<div class="campo-versao hidden" id="cx-versao">'
-  +     '<select class="sel-inline" id="sel-versao" title="Recorta a lista por versão"></select>'
-  +   '</div>'
   +   '<button class="btn btn-primary" id="bt-carregar">'+icon("refresh",14,"ic-load")+' Atualizar</button>'
   +   '<button class="btn hidden" id="bt-parar">'+icon("x",14)+' Parar</button>'
-  +   '<div class="seg hidden" id="seg-modo">'
-  +     '<span class="seg-lab">Replicação</span>'
-  +     '<div class="seg-cx">'
-  +       '<button data-modo="manual" id="bt-modo-manual">Manual</button>'
-  +       '<button data-modo="auto" id="bt-modo-auto">Auto</button>'
-  +     '</div>'
-  +   '</div>'
-  +   '<button class="btn hidden" id="bt-replicar">'+icon("up",14,"ic-rep")+' Replicar</button>'
   +   '<div class="topo-stats" id="topo-stats"></div>'
   + '</header>'
   + '<div class="statusbar hidden" id="aviso"></div>'
@@ -1898,6 +1406,11 @@ function montarShell(){
   +       '<div class="pop hidden" id="pop-colunas"><div class="pop-cab">Colunas desta lista. A escolha é sua e fica salva na sua conta.</div>'
   +       '<div class="pop-acoes"><button data-cols="padrao">Padrão</button><button data-cols="limpar">Tirar campos extras</button></div>'
   +       '<div class="pop-lista" id="lista-colunas"></div></div></div>'
+  /* Versão escolhida na própria barra da aba Versões, ao lado de Colunas: a
+     barra de cima fica igual em todas as abas. */
+  +     '<div class="campo-versao hidden" id="cx-versao">'
+  +       '<select class="sel-inline" id="sel-versao" title="Recorta a lista por versão"></select>'
+  +     '</div>'
   +     '<div class="toolbar-dir"><span id="cont-linhas"></span>'
   +       '<button class="btn" id="bt-export">'+icon("down",14)+' Exportar</button></div>'
   +   '</div>'
@@ -1907,7 +1420,9 @@ function montarShell(){
   +     '<div class="vazio hidden" id="vazio"></div>'
   +   '</div>'
   +   '<div class="dd" id="dd-multi"><div class="pop pop-fixo hidden" id="pop-multi">'
-  +     '<div class="pop-cab" id="multi-cab"></div>'
+  /* Marcar não fecha nem aplica: a seleção vale quando se clica em Filtrar. */
+  +     '<div class="pop-cab pop-cab-acao"><span id="multi-cab"></span>'
+  +       '<button type="button" class="btn btn-primary btn-sm" id="bt-multi-filtrar">Filtrar</button></div>'
   +     '<div class="pop-search">'+icon("search",13)+'<input id="in-busca-multi" placeholder="Buscar"></div>'
   +     '<div class="pop-acoes"><button data-mt="todos" id="bt-multi-todos">Marcar todos</button>'
   +       '<button data-mt="externos" id="bt-multi-ext">Só externos</button>'
@@ -2020,11 +1535,10 @@ function montarShell(){
   +   '</div>'
   + '</div>';
 
-  ["bt-carregar","bt-parar","topo-stats","aviso","resumo","toolbar","bt-replicar",
-   "seg-modo","bt-modo-manual","bt-modo-auto",
+  ["bt-carregar","bt-parar","topo-stats","aviso","resumo","toolbar",
    "bt-limpar","cont-linhas","bt-export","bt-colunas","pop-colunas","lista-colunas","ct-colunas",
    "bt-status","pop-status","lista-status","ct-status",
-   "pop-multi","multi-cab","in-busca-multi","lista-multi","bt-multi-todos","bt-multi-ext",
+   "pop-multi","multi-cab","bt-multi-filtrar","in-busca-multi","lista-multi","bt-multi-todos","bt-multi-ext",
    "scroll","tabela","colgroup","thead","tbody","vazio","rodape","cx-versao","sel-versao",
    "badge-cl","badge-hg","painel-tabela","painel-checklist","painel-homolog",
    "hg-sub","hg-trilha","hg-trilha-txt","hg-pills","in-busca-hg","sel-hg-versao","sel-hg-status",
@@ -2069,7 +1583,7 @@ function renderTopo(){
   el["bt-carregar"].title = incremental
     ? "Busca no Jira só as tarefas alteradas desde "+fmtDataHora(state.syncGeral)
     : "Traz todas as tarefas do projeto";
-  el["bt-carregar"].classList.toggle("hidden", state.aba==="ponto");
+  /* Sempre no mesmo lugar, em todas as abas: a barra de cima não muda. */
 
   /* Os dois seletores saem dos dados carregados — nao ha mais campo livre,
      entao nao da pra pedir uma versao ou um nome que nao existe. */
@@ -2093,7 +1607,6 @@ function renderTopo(){
     if(state.ultimoSync) h += '<span>Atualizado <b style="font-size:var(--fs-xs);color:var(--text-muted);">'+fmtDataHora(state.ultimoSync)+'</b></span>';
   }
   el["topo-stats"].innerHTML = h;
-  renderReplicar();
 
   var prontas = clDerivados().resumo.teste;
   if(prontas>0){ el["badge-cl"].textContent = prontas; el["badge-cl"].classList.remove("hidden"); }
@@ -2273,27 +1786,19 @@ function cabecalho(){
     var on = state.sort.col===c.id;
     var seta = on ? icon(state.sort.dir==="asc"?"up":"arrowdown",11,"seta") : "";
     return '<th style="width:'+c.w+'px;min-width:'+c.w+'px;">'
-      + '<button class="th-btn'+(on?" on":"")+'" data-col="'+c.id+'">'
+      + '<button class="th-btn'+(on?" on":"")+'" data-col="'+c.id+'" draggable="true" data-move="'+c.id+'" title="Clique para ordenar; arraste para mudar a coluna de lugar">'
       + '<span class="th-lab">'+esc(c.rot)+'</span>'+seta+'</button></th>';
   }).join("") + "</tr>";
 
   var filtros = "<tr>" + cols.map(function(c){
     var v = state.filtros[c.id] || "";
     var campo;
-    if(c.tipo==="status"){
-      var n = state.statusSel.length;
-      campo = '<button data-fstatus="1" class="'+(n?"ativo":"")+'">'
-        + (n===0 ? "Todos" : n===1 ? esc(state.statusSel[0]) : n+" status") + '</button>';
-    } else if(c.tipo==="multi"){
-      var sm = Array.isArray(state.filtros[c.id]) ? state.filtros[c.id] : [];
+    if(c.tipo==="status" || c.tipo==="multi" || c.tipo==="enum"){
+      /* Lista de valores: marca vários e aplica em Filtrar (ver renderMulti). */
+      var sm = selFiltro(c.id);
       campo = '<button data-fmulti="'+c.id+'" class="'+(sm.length?"ativo":"")+'"'
         + (sm.length>1 ? ' title="'+esc(sm.join(", "))+'"' : '') + '>'
         + (sm.length===0 ? "Todos" : sm.length===1 ? esc(sm[0]) : sm.length+" selecionados") + '</button>';
-    } else if(c.tipo==="enum"){
-      campo = '<select data-filtro="'+c.id+'" class="'+(v?"ativo":"")+'"><option value="">Todos</option>'
-        + valoresDe(c.id).map(function(x){
-            return '<option value="'+esc(x)+'"'+(x===v?" selected":"")+'>'+esc(x)+'</option>';
-          }).join("") + '</select>';
     } else {
       campo = '<input data-filtro="'+c.id+'" class="'+(v?"ativo":"")+'" value="'+esc(v)+'" placeholder="filtrar">';
     }
@@ -2310,13 +1815,6 @@ function cabecalho(){
       cabecalho(); renderTabela();
     };
   });
-  el["thead"].querySelectorAll("select[data-filtro]").forEach(function(sel){
-    sel.onchange = function(){
-      state.filtros[sel.getAttribute("data-filtro")] = sel.value;
-      sel.classList.toggle("ativo", !!sel.value);
-      renderTabela(); renderToolbar(); renderResumo();
-    };
-  });
   /* Campo de texto NÃO remonta o cabeçalho a cada tecla: remontar tira o
      foco do campo e a pessoa perde a digitação no meio. */
   el["thead"].querySelectorAll("input[data-filtro]").forEach(function(inp){
@@ -2326,14 +1824,12 @@ function cabecalho(){
       renderTabela(); renderToolbar();
     };
   });
-  var bst = el["thead"].querySelector("[data-fstatus]");
-  if(bst) bst.onclick = function(e){ e.stopPropagation(); alternarMenuTab("status"); };
   el["thead"].querySelectorAll("[data-fmulti]").forEach(function(b){
     b.onclick = function(e){
       e.stopPropagation();
       var id = b.getAttribute("data-fmulti");
       var abrir = state.menuTab !== "multi:"+id;
-      if(abrir){ state.multiCol = id; el["in-busca-multi"].value = ""; }
+      if(abrir){ state.multiCol = id; state.multiRascunho = selFiltro(id).slice(); el["in-busca-multi"].value = ""; }
       alternarMenuTab("multi:"+id);
       if(abrir){ renderMulti(); posicionarMulti(); try{ el["in-busca-multi"].focus(); }catch(err){} }
     };
@@ -2341,28 +1837,46 @@ function cabecalho(){
   if(state.menuTab && state.menuTab.indexOf("multi:")===0) posicionarMulti();
 }
 
-/* ---------- filtro multi (coluna Cliente) ---------- */
-function colunaMulti(){ return COLUNAS.filter(function(c){ return c.id===state.multiCol; })[0]; }
-function selMulti(){
-  var v = state.filtros[state.multiCol];
-  return Array.isArray(v) ? v : [];
+/* ---------- filtro por lista de valores (Status, Cliente e colunas de opções) ----------
+   Marcar e desmarcar mexe só no rascunho; Filtrar aplica e fecha. Clicar
+   fora descarta o rascunho. */
+function colunaMulti(){ return COLUNA_POR_ID[state.multiCol]; }
+function selFiltro(id){
+  if(COLUNA_POR_ID[id] && COLUNA_POR_ID[id].tipo === "status") return state.statusSel;
+  var v = state.filtros[id];
+  return Array.isArray(v) ? v : (typeof v === "string" && v ? [v] : []);
+}
+function selMulti(){ return state.multiRascunho || []; }
+function opcoesFiltro(id){
+  var c = COLUNA_POR_ID[id];
+  if(c && c.tipo === "multi") return opcoesMulti(id);
+  var s = {};
+  tarefasDaAba().forEach(function(t){
+    var v = c && c.tipo === "status" ? (t.status || "") : valorDaColuna(t, id);
+    if(v) s[v] = (s[v]||0) + 1;
+  });
+  return Object.keys(s).sort(function(a,b){ return a.localeCompare(b,"pt-BR"); })
+    .map(function(v){ return {v:v, n:s[v]}; });
 }
 function opcoesMultiVisiveis(){
   var q = norm(el["in-busca-multi"].value);
-  return opcoesMulti(state.multiCol).filter(function(o){ return !q || norm(o.v).indexOf(q)!==-1; });
+  return opcoesFiltro(state.multiCol).filter(function(o){ return !q || norm(o.v).indexOf(q)!==-1; });
 }
-function aplicarMulti(lista){
-  if(lista.length) state.filtros[state.multiCol] = lista;
-  else delete state.filtros[state.multiCol];
-  renderMulti(); cabecalho(); renderTabela(); renderToolbar(); renderResumo();
+function marcarFiltroRascunho(lista){ state.multiRascunho = lista; renderMulti(); }
+function aplicarMulti(){
+  var id = state.multiCol, lista = selMulti().slice();
+  if(COLUNA_POR_ID[id] && COLUNA_POR_ID[id].tipo === "status"){ state.statusSel = lista; salvarPref(); }
+  else if(lista.length) state.filtros[id] = lista;
+  else delete state.filtros[id];
+  state.menuTab = null; fecharPopsTab();
+  cabecalho(); renderTabela(); renderToolbar(); renderResumo();
 }
 function renderMulti(){
   var c = colunaMulti();
   if(!c) return;
   var sel = selMulti(), q = el["in-busca-multi"].value.trim();
   var ops = opcoesMultiVisiveis();
-  el["multi-cab"].innerHTML = esc(c.rot)+' exibidos. Nenhum marcado significa <b>todos</b>.'
-    + (sel.length ? ' <b>'+sel.length+'</b> marcado(s).' : '');
+  el["multi-cab"].innerHTML = '<b>'+esc(c.rot)+'</b>'+(sel.length ? ' · '+sel.length+' marcado(s)' : ' · nenhum marcado = todos');
   /* Com busca, "Marcar todos" marca só o que a busca achou — é o jeito de pegar
      de uma vez todos os "Agro…" sem clicar um por um. */
   el["bt-multi-todos"].textContent = q ? "Marcar os "+ops.length+" achados" : "Marcar todos";
@@ -2382,7 +1896,7 @@ function renderMulti(){
     b.onclick = function(e){
       e.stopPropagation();
       var v = b.getAttribute("data-mt-tog"), s = selMulti();
-      aplicarMulti(s.indexOf(v)===-1 ? s.concat([v]) : s.filter(function(x){ return x!==v; }));
+      marcarFiltroRascunho(s.indexOf(v)===-1 ? s.concat([v]) : s.filter(function(x){ return x!==v; }));
     };
   });
 }
@@ -2411,7 +1925,7 @@ function linhaHtml(t){
   var cols = {
     key:'<a class="chave" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+icon("ext",10)+'</a>'+pontoButton(t.key),
     summary:(t.impedida?icon("flag",12,"impedida")+" ":"")+esc(t.summary),
-    type:'<span class="'+(norm(t.type)==="bug"?"tipo-bug":"cel-faint")+'">'+esc(t.type)+'</span>',
+    type:tipoTag(t.type),
     status:etiquetaStatus(t.status),
     prazo:'<span class="cel-mono'+(mp.cls||" cel-faint")+'" title="'+esc(mp.titulo)+'">'+fmtData(t.prazo)+'</span>',
     priority:esc(t.priority),
@@ -2970,7 +2484,7 @@ function renderClCols(){
     } else {
       dentro = esc(c.rot);
     }
-    return '<span class="'+c.cls+'"'+(c.w ? ' style="width:'+c.w+'px"' : '')+'>'+dentro+'</span>';
+    return '<span class="'+c.cls+'"'+moverAttr("checklist", c)+(c.w ? ' style="width:'+c.w+'px"' : '')+'>'+dentro+'</span>';
   }).join("");
   el["cl-cols"].querySelectorAll("[data-ord]").forEach(function(b){
     b.onclick = function(){ clOrdenarPor(b.getAttribute("data-ord")); };
@@ -3047,7 +2561,7 @@ function renderClList(){
               : (disp ? '<span class="chip-mini chip-disp" title="Sua marcação — só você vê">Indisponível para teste '+fmtData(disp.em)+'</span>'
                       : (autoDisp ? '<span class="chip-mini chip-disp">Indisponível para teste</span>' : "")))
       + '</span>'
-      + '<span class="cl-type cel-faint">'+esc(t.type)+'</span>'
+      + '<span class="cl-type">'+tipoTag(t.type)+'</span>'
       + '<span class="cl-status">'+etiquetaStatus(t.status)+'</span>'
       + '<span class="cl-squad cel-faint">'+esc(t.squad)+'</span>'
       + '<span class="cl-cliente'+(cli.externo?"":" cel-faint")+'" title="'+esc(cli.nome)+'">'+esc(cli.nome)+'</span>'
@@ -3481,7 +2995,7 @@ function renderHgCols(){
     } else {
       dentro = c.icone ? icon(c.icone,12) : esc(c.rot);
     }
-    return '<span class="'+c.cls+'"'+(c.tit ? ' title="'+esc(c.tit)+'"' : '')+(c.w ? ' style="width:'+c.w+'px"' : '')+'>'+dentro+'</span>';
+    return '<span class="'+c.cls+'"'+moverAttr("homolog", c)+(c.tit ? ' title="'+esc(c.tit)+'"' : '')+(c.w ? ' style="width:'+c.w+'px"' : '')+'>'+dentro+'</span>';
   }).join("");
   el["hg-cols"].querySelectorAll("[data-ord]").forEach(function(b){
     b.onclick = function(){ hgOrdenarPor(b.getAttribute("data-ord")); };
@@ -3632,7 +3146,7 @@ function linhaHomolog(t){
     +   (fora ? '<span class="chip-mini chip-fora" title="Tirada da fila aqui'+(quandoFora?" em "+quandoFora:"")
     +     ' — no Jira o status é '+esc(t.status||"sem status")+'">fora da fila</span>' : "")
     + '</span>'
-    + '<span class="cl-type cel-faint">'+esc(t.type)+'</span>'
+    + '<span class="cl-type">'+tipoTag(t.type)+'</span>'
     + '<span class="cl-status">'+etiquetaStatus(t.status)+'</span>'
     + '<span class="hg-testes cel-faint" title="'+esc(t.testAnalyst||"")+'">'+esc(t.testAnalyst||SEM_PESSOA)+'</span>'
     + '<span class="hg-est cel-faint">'+esc(t.estimativa||"")+'</span>'
@@ -3859,17 +3373,6 @@ function carregarVersoesCache(){
     if(Array.isArray(v)) state.versoesJira = v;
   }catch(e){}
 }
-function campoCorrigidasDe(res){
-  var p = (res && res.payload) || res || {};
-  if(typeof p === "string"){ try{ p = JSON.parse(p); }catch(e){ p = {}; } }
-  if(p && p.data && typeof p.data === "object") p = p.data;   // executeRead embrulha em data
-  var fs = Array.isArray(p.fields) ? p.fields : null;
-  return {
-    temCampos: !!fs,
-    total: typeof p.total === "number" ? p.total : 0,
-    campo: fs ? fs.filter(function(f){ return (f.fieldId || f.key) === CAMPO_CORRIGIDAS; })[0] || null : null
-  };
-}
 function buscarMeta(){
   return window.nimitz.versions().then(function(values){
     return {temCampos:true, total:1, campo:{fieldId:"fixVersions", allowedValues:values}};
@@ -3880,16 +3383,7 @@ function carregarVersoesJira(forcar){
   if(!jiraDisponivel() || state.versoesJiraCarregando) return;
   if(state.versoesJiraSessao && !forcar) return;
   state.versoesJiraCarregando = true;
-  buscarMeta(META_POS, 1).then(function(r){
-    if(r.campo || !r.temCampos) return r.campo;
-    var i = 0;
-    function passo(){
-      if(i >= r.total) return null;
-      var ini = i; i += 8;
-      return buscarMeta(ini, 8).then(function(r2){ return r2.campo || passo(); });
-    }
-    return passo();
-  }).then(function(campo){
+  buscarMeta().then(function(r){ return r.campo; }).then(function(campo){
     state.versoesJiraCarregando = false;
     state.versoesJiraSessao = true;
     if(!campo) return;
@@ -4314,13 +3808,15 @@ function ligarEventos(){
     };
   });
   el["in-busca-multi"].addEventListener("input", renderMulti);
+  el["bt-multi-filtrar"].onclick = function(e){ e.stopPropagation(); aplicarMulti(); };
+  el["in-busca-multi"].addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); aplicarMulti(); } });
   el["pop-multi"].querySelectorAll("[data-mt]").forEach(function(b){
     b.onclick = function(){
       var a = b.getAttribute("data-mt"), s = selMulti();
-      if(a==="nenhum") return aplicarMulti([]);
+      if(a==="nenhum") return marcarFiltroRascunho([]);
       var novos = opcoesMultiVisiveis().map(function(o){ return o.v; });
       if(a==="externos") novos = novos.filter(function(v){ return v!=="Interna"; });
-      aplicarMulti(s.concat(novos.filter(function(v){ return s.indexOf(v)===-1; })));
+      marcarFiltroRascunho(s.concat(novos.filter(function(v){ return s.indexOf(v)===-1; })));
     };
   });
   el["scroll"].addEventListener("scroll", posicionarMulti, {passive:true});
@@ -4526,6 +4022,15 @@ Object.defineProperty(state, "ocultas", {
 function listaDeIds(v, valido){ return Array.isArray(v) ? v.filter(function(x){ return typeof x === "string" && valido(x); }) : null; }
 function adotarColunas(c){
   if(!c || typeof c !== "object") return;
+  if(c.ordem && typeof c.ordem === "object"){
+    var ordem = {}, extrasOk = {fase:true};
+    GRADE_PADRAO_ORDEM.checklist.concat(GRADE_PADRAO_ORDEM.homolog).forEach(function(id){ extrasOk[id] = true; });
+    ["tarefas","versoes","checklist","homolog"].forEach(function(aba){
+      var l = listaDeIds(c.ordem[aba], function(id){ return !!extrasOk[id] || !!COLUNA_POR_ID[id]; });
+      if(l) ordem[aba] = l.slice(0, 200);
+    });
+    state.colunas.ordem = ordem;
+  }
   ["tarefas","versoes"].forEach(function(aba){
     var l = listaDeIds(c[aba], function(id){ return !!COLUNA_POR_ID[id]; });
     if(l) state.colunas[aba] = l;
@@ -4568,19 +4073,103 @@ function redesenharGrades(){
   try{ renderHomolog(); }catch(e){}
 }
 
+/* ---- ordem das colunas (arrastar o cabeçalho) ----
+   Uma ordem por aba e por pessoa, em state.colunas.ordem, salva junto com a
+   escolha de colunas (navegador e conta). Coluna que não está na lista vai
+   para o fim, na ordem padrão. */
+var GRADE_PADRAO_ORDEM = {
+  checklist:["type","status","squad","cliente","priority","versao","prazo"],
+  homolog:["type","status","testAnalyst","estimativa","versao","fase","prazo","obs"]
+};
+var GRADE_FASE_SEL = [".hg-c-fase",".hg-fase"];
+var GRADE_FIM = {checklist:[".cl-c-act",".cl-dismiss"], homolog:[".hg-c-act",".hg-act"]};
+function ordemDe(aba){ var o = state.colunas.ordem && state.colunas.ordem[aba]; return Array.isArray(o) ? o : []; }
+function ordenarColunas(aba, ids){
+  var salvo = ordemDe(aba).filter(function(id){ return ids.indexOf(id) !== -1; });
+  return salvo.concat(ids.filter(function(id){ return salvo.indexOf(id) === -1; }));
+}
+function moveisDaGrade(g){
+  return GRADE_PADRAO_ORDEM[g].concat(extrasDaGrade(g).map(function(c){ return c.id; }));
+}
+function seletoresMovel(g, id){
+  if(g === "homolog" && id === "fase") return GRADE_FASE_SEL;
+  var n = GRADE_NATIVAS[g].filter(function(x){ return x.id === id; })[0];
+  if(n) return n.sel.split(",");
+  return [".gx-"+id];
+}
+/* Id da coluna móvel a que pertence um item do cabeçalho da grade. */
+function idMovel(g, c){
+  var cls = String(c.cls).split(" ");
+  var ex = cls.filter(function(x){ return x.indexOf("gx-") === 0; })[0];
+  if(ex) return ex.slice(3);
+  var ids = moveisDaGrade(g);
+  for(var i=0;i<ids.length;i++){
+    if(seletoresMovel(g, ids[i]).some(function(sel){ return sel.trim() === "."+cls[0]; })) return ids[i];
+  }
+  return null;
+}
+function moverAttr(g, c){
+  var id = idMovel(g, c);
+  return id ? ' draggable="true" data-move="'+esc(id)+'" data-move-g="'+g+'"' : '';
+}
+function moverColuna(aba, de, para, depois){
+  if(de === para) return;
+  var grade = aba === "checklist" || aba === "homolog";
+  var ids = grade ? moveisDaGrade(aba) : COLUNAS.map(function(c){ return c.id; });
+  var ordem = ordenarColunas(aba, ids).filter(function(id){ return id !== de; });
+  var i = ordem.indexOf(para); if(i === -1) return;
+  ordem.splice(depois ? i+1 : i, 0, de);
+  if(!state.colunas.ordem) state.colunas.ordem = {};
+  state.colunas.ordem[aba] = ordem;
+  salvarPref();
+  if(grade){ aplicarCssColunas(); if(aba === "checklist") renderClCols(); else renderHgCols(); }
+  else { cabecalho(); renderTabela(); }
+}
+/* Arrastar pelo cabeçalho, nas quatro abas. A marca mostra de que lado a
+   coluna vai entrar. */
+function ligarArrasteColunas(){
+  var origem = null;
+  function alvo(e){ return e.target.closest ? e.target.closest("[data-move]") : null; }
+  function abaDo(n){ return n.getAttribute("data-move-g") || abaDaTabela(); }
+  function limpar(){
+    document.querySelectorAll(".mv-antes,.mv-depois,.mv-origem").forEach(function(n){ n.classList.remove("mv-antes","mv-depois","mv-origem"); });
+  }
+  document.addEventListener("dragstart", function(e){
+    var n = alvo(e); if(!n) return;
+    origem = {id:n.getAttribute("data-move"), aba:abaDo(n)};
+    n.classList.add("mv-origem");
+    try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", origem.id); }catch(err){}
+  });
+  document.addEventListener("dragover", function(e){
+    var n = alvo(e); if(!n || !origem || abaDo(n) !== origem.aba) return;
+    e.preventDefault();
+    var r = n.getBoundingClientRect(), depois = e.clientX > r.left + r.width/2;
+    document.querySelectorAll(".mv-antes,.mv-depois").forEach(function(x){ if(x !== n) x.classList.remove("mv-antes","mv-depois"); });
+    n.classList.toggle("mv-depois", depois); n.classList.toggle("mv-antes", !depois);
+  });
+  document.addEventListener("drop", function(e){
+    var n = alvo(e); if(!n || !origem || abaDo(n) !== origem.aba) return;
+    e.preventDefault();
+    var r = n.getBoundingClientRect(), o = origem;
+    origem = null; limpar();
+    moverColuna(o.aba, o.id, n.getAttribute("data-move"), e.clientX > r.left + r.width/2);
+  });
+  document.addEventListener("dragend", function(){ origem = null; limpar(); });
+}
+
 /* ---- Checklist e Homologação ---- */
 function extrasDaGrade(g){
   var ex = state.colunas[g].extras;
   return COLUNAS.filter(function(c){ return ex.indexOf(c.id) !== -1 && !GRADE_JA_TEM[g][c.id]; });
 }
 function colunasCabecalho(g, base){
-  var extras = extrasDaGrade(g).map(function(c){ return {cls:"g-extra", rot:c.rot, ord:c.id, w:c.w}; });
+  var extras = extrasDaGrade(g).map(function(c){ return {cls:"g-extra gx-"+c.id, rot:c.rot, ord:c.id, w:c.w}; });
   return base.slice(0, -1).concat(extras, base.slice(-1));
 }
 function celulasExtras(g, t){
   return extrasDaGrade(g).map(function(c){
     var v = valorDaColuna(t, c.id);
-    return '<span class="g-extra cel-faint'+(COL_NUMERICAS[c.id] ? " g-num" : "")+'" style="width:'+c.w+'px" title="'+esc(v)+'">'+esc(v)+'</span>';
+    return '<span class="g-extra gx-'+c.id+' cel-faint'+(COL_NUMERICAS[c.id] ? " g-num" : "")+'" style="width:'+c.w+'px" title="'+esc(v)+'">'+esc(v)+'</span>';
   }).join("");
 }
 function aplicarCssColunas(){
@@ -4593,6 +4182,18 @@ function aplicarCssColunas(){
       n.sel.split(",").forEach(function(sel){
         GRADE_LINHA[g].forEach(function(linha){ css += GRADE_PAINEL[g]+" "+linha+" > "+sel+"{display:none}"; });
       });
+    });
+  });
+  /* Ordem escolhida pela pessoa: só muda a propriedade order das células, as
+     linhas não são remontadas. Antes (chave, resumo) e depois (ações) ficam. */
+  ["checklist","homolog"].forEach(function(g){
+    ordenarColunas(g, moveisDaGrade(g)).forEach(function(id, i){
+      seletoresMovel(g, id).forEach(function(sel){
+        GRADE_LINHA[g].forEach(function(linha){ css += GRADE_PAINEL[g]+" "+linha+" > "+sel+"{order:"+(10+i)+"}"; });
+      });
+    });
+    GRADE_FIM[g].forEach(function(sel){
+      GRADE_LINHA[g].forEach(function(linha){ css += GRADE_PAINEL[g]+" "+linha+" > "+sel+"{order:999}"; });
     });
   });
   var tag = document.getElementById("grade-colunas-css");
@@ -4944,7 +4545,8 @@ inicializarCheck();
 revivarSeNecessario();
 ligarEventos();
 ligarColunasGrade();
-iniciarReplicacao();
+ligarArrasteColunas();
+iniciarRetomada();
 renderTudo();
 aplicarRetomada();
 iniciarComp();

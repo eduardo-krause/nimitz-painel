@@ -415,7 +415,11 @@ tr:hover .chave svg{opacity:.6;}
 .prazo-estourado svg{color:var(--danger);}
 .prazo-semana{color:var(--warn-text);font-weight:700;}
 .prazo-semana svg{color:var(--warn-text);}
-.tipo-bug{color:var(--danger);}
+.tipo{display:inline-flex;align-items:center;max-width:100%;padding:1px var(--sp-2);border-radius:var(--r-full);
+  font-size:var(--fs-xs);font-weight:600;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tipo-bug{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-border);}
+.tipo-melhoria{background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-border);}
+.tipo-outro{color:var(--text-faint);padding-left:0;padding-right:0;}
 .impedida{color:var(--warn-text);}
 
 .vazio{display:flex;flex-direction:column;align-items:center;gap:var(--sp-3);padding:var(--sp-6) var(--sp-5);
@@ -692,6 +696,14 @@ tr:hover .chave svg{opacity:.6;}
    Dentro do <th> ele seria cortado pelo overflow da tabela e remontado a cada
    marcação. */
 .pop.pop-fixo{position:fixed;top:0;left:0;}
+/* Arrastar colunas pelo cabeçalho: a barra mostra de que lado ela entra. */
+[data-move]{cursor:grab;}
+[data-move].mv-origem{opacity:.4;}
+[data-move].mv-antes{box-shadow:inset 2px 0 0 var(--accent-2);}
+[data-move].mv-depois{box-shadow:inset -2px 0 0 var(--accent-2);}
+/* Cabeçalho do filtro de coluna: título à esquerda, Filtrar no canto direito. */
+.pop-cab-acao{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);}
+.btn.btn-sm{height:var(--ctrl-h-sm);padding:0 var(--sp-3);font-size:var(--fs-xs);}
 .pop-item .qtd{margin-left:auto;font-family:var(--font-mono);font-size:var(--fs-label);color:var(--text-faint);}
 .pop-item .nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .chk{flex:none;display:flex;align-items:center;justify-content:center;width:16px;height:16px;
