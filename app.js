@@ -387,7 +387,6 @@ var state = {
   ultimoSync: null,
   syncGeral: null,
   syncPessoa: {},
-  busca: "",
   fase: null,           // filtro por tile
   filtros: {},              // filtro por coluna: id -> valor
   statusSel: [],            // status exibidos (vazio = todos)
@@ -425,7 +424,6 @@ var state = {
   clSort: {col:"", dir:"asc"},
   /* seletor de pessoa e menu "Atualizar": busca, item destacado pelo teclado */
   clBuscaPessoa: "", clDestaque: 0,
-  clBuscaAtualizar: "", clDestaqueAtualizar: 0,
   clJaAutoSelecionou: false,
   /* aba Homologação — recortes de quem está olhando, não viajam no pacote */
   hgBusca: "", hgVersao: "", hgStatus: "", hgSoPendentes: false,
@@ -569,6 +567,7 @@ function salvar(){
     guardou = false;
   }
   marcarSujo();
+  agendarComp();
   return guardou;
 }
 function metaLocal(){
@@ -761,7 +760,7 @@ function statusPresentesTab(){
   });
 }
 function temFiltroAtivo(){
-  return !!(state.busca || (state.aba==="versoes" && state.fase) || state.statusSel.length ||
+  return !!((state.aba==="versoes" && state.fase) || state.statusSel.length ||
             Object.keys(state.filtros).some(function(k){ return filtroLigado(state.filtros[k]); }));
 }
 function tarefasDaAba(){
@@ -1125,19 +1124,64 @@ function mesclar(lista){
   return {novas:novas, atualizadas:atualizadas};
 }
 
-/* A janela por "updated" nao enxerga o que SAIU: tarefa apagada ou movida de
-   projeto ficaria aqui para sempre. Uma contagem do projeto custa uma chamada
-   e denuncia a divergencia, em vez de deixar o painel mentir em silencio. */
+/* A janela por "updated" não enxerga o que SAIU: tarefa apagada ou movida de
+   projeto ficaria aqui para sempre. Por isso o Atualizar também lista as
+   CHAVES do projeto (só a chave, milhares por página no Jira) e acerta a
+   diferença sozinho: tira daqui o que não existe mais e busca o que faltar.
+   Lista no máximo a cada CONFERIR_CHAVES_MS, que saída de tarefa é rara. */
+var CONFERIR_CHAVES_MS = 15*60*1000, chavesConferidasEm = 0;
+function chavesDoProjeto(){
+  var chaves = Object.create(null), cursores = Object.create(null), n = 0;
+  function pagina(cursor){
+    return window.nimitz.search(jqlTudo(), ["key"], cursor).then(function(r){
+      r.issues.forEach(function(i){ if(i.key && !chaves[i.key]){ chaves[i.key] = true; n++; } });
+      if(r.isLast) return;
+      if(!r.nextPageToken || cursores[r.nextPageToken]) throw new Error("Paginação inconsistente.");
+      cursores[r.nextPageToken] = true;
+      return pagina(r.nextPageToken);
+    });
+  }
+  return pagina(null).then(function(){ return {chaves:chaves, total:n}; });
+}
 function conferirTotal(){
-  return chamarJira(jqlTudo(), "count").then(function(r){
-    if(typeof r.total !== "number") return;
+  if(Date.now() - chavesConferidasEm < CONFERIR_CHAVES_MS) return Promise.resolve();
+  return chavesDoProjeto().then(function(r){
+    chavesConferidasEm = Date.now();
+    if(state.carregando) return;
     state.total = r.total;
-    if(r.total !== state.tarefas.length){
-      avisar("info","O Jira tem "+r.total+" tarefa(s) e aqui ha "+state.tarefas.length
-        +". Alguma foi apagada ou movida de projeto — use Tudo para refazer do zero.");
+    var aqui = Object.create(null);
+    var antes = state.tarefas.length;
+    state.tarefas = state.tarefas.filter(function(t){ aqui[t.key] = true; return r.chaves[t.key]; });
+    var saiu = antes - state.tarefas.length;
+    var faltam = Object.keys(r.chaves).filter(function(k){ return !aqui[k]; });
+    function fechar(novas){
+      if(saiu || novas){
+        salvar(); inicializarCheck();
+        avisar("info", [saiu ? saiu+" tarefa(s) apagada(s) ou movida(s) de projeto saíram da lista" : "",
+                        novas ? novas+" tarefa(s) que faltavam foram trazidas do Jira" : ""]
+                        .filter(Boolean).join("; ")+".");
+        renderTudo();
+      } else renderTopo();
     }
-    renderTopo();
-  }).catch(function(){});
+    if(!faltam.length){ fechar(0); return; }
+    var trazidas = [];
+    function lote(i){
+      if(i >= faltam.length) return Promise.resolve();
+      var pedaco = faltam.slice(i, i+50);
+      function pag(cursor){
+        return chamarJira('project = '+PROJETO+' AND key in ("'+pedaco.join('","')+'")', "issues", cursor).then(function(x){
+          x.nodes.forEach(function(nd){ if(nd.key) trazidas.push(mapear(nd)); });
+          if(!x.isLast && x.nextPageToken) return pag(x.nextPageToken);
+        });
+      }
+      return pag(null).then(function(){ return lote(i+50); });
+    }
+    return lote(0).then(function(){
+      if(state.carregando) return;
+      if(trazidas.length) mesclar(trazidas);
+      fechar(trazidas.length);
+    });
+  }).catch(function(e){ console.warn("Não deu para conferir as chaves do projeto:", msgErro(e)); });
 }
 
 /* Quantos minutos de janela cabem a partir de um carimbo — ou null quando ele
@@ -1159,12 +1203,6 @@ function janelaMinutos(desde){
 function carimbarGeral(){
   state.syncGeral = new Date().toISOString();
   state.ultimoSync = state.syncGeral;
-}
-function carimbarPessoa(nome){
-  var m = Object.assign({}, state.syncPessoa);
-  m[nome] = new Date().toISOString();
-  state.syncPessoa = m;
-  state.ultimoSync = m[nome];
 }
 
 /* Atualizacao incremental: pede so o que mudou desde o ultimo carregamento. */
@@ -1189,6 +1227,7 @@ function atualizar(){
     carimbarGeral();
     salvar();
     inicializarCheck();
+    revivarSeNecessario();
     if(info.interrompido){
       avisar("info","Interrompido. "+lista.length+" de "+total+" mudança(s) aplicadas.");
     } else {
@@ -1206,7 +1245,6 @@ function contagemPorFase(lista){
   return c;
 }
 function filtradas(){
-  var q = norm(state.busca);
   var sel = state.statusSel.length ? state.statusSel.map(norm) : null;
   var ativos = COLUNAS.filter(function(c){ return c.tipo!=="status" && filtroLigado(state.filtros[c.id]); });
   return tarefasDaAba().filter(function(t){
@@ -1221,10 +1259,6 @@ function filtradas(){
       var alvo = valorDaColuna(t, c.id);
       if(c.tipo==="enum"){ if(alvo!==v) return false; }
       else if(norm(alvo).indexOf(norm(v))===-1) return false;
-    }
-    if(q){
-      var busca = norm([t.key,t.summary,t.status,t.type,t.testAnalyst,t.dev,t.cliente,t.ticket].join(" "));
-      if(busca.indexOf(q)===-1) return false;
     }
     return true;
   });
@@ -1539,7 +1573,6 @@ function guardarRetomada(){
   try{
     sessionStorage.setItem(LS_RETOMAR, JSON.stringify({
       aba: state.aba,
-      busca: state.busca,
       clBusca: state.clBusca,
       fase: state.fase,
       filtros: state.filtros,
@@ -1580,7 +1613,6 @@ function lerRetomada(){
   carregarVersoesCache();
   if(!RETOMADA) return;
   if(RETOMADA.aba) state.aba = RETOMADA.aba;
-  if(typeof RETOMADA.busca === "string") state.busca = RETOMADA.busca;
   if(typeof RETOMADA.clBusca === "string") state.clBusca = RETOMADA.clBusca;
   if(RETOMADA.fase) state.fase = RETOMADA.fase;
   /* Antes do render: a linha de filtros do cabeçalho é montada a partir de
@@ -1597,7 +1629,6 @@ function lerRetomada(){
 }
 function aplicarRetomada(){
   if(!RETOMADA) return;
-  if(el["in-busca"]) el["in-busca"].value = state.busca || "";
   if(el["in-busca-cl"]) el["in-busca-cl"].value = state.clBusca || "";
   if(el["cl-list"] && RETOMADA.rolagem) el["cl-list"].scrollTop = RETOMADA.rolagem;
   if(el["in-busca-hg"]) el["in-busca-hg"].value = state.hgBusca || "";
@@ -1839,8 +1870,7 @@ function montarShell(){
   +   '<div class="campo-versao hidden" id="cx-versao">'
   +     '<select class="sel-inline" id="sel-versao" title="Recorta a lista por versão"></select>'
   +   '</div>'
-  +   '<button class="btn btn-primary" id="bt-carregar">'+icon("refresh",14,"ic-load")+' Carregar</button>'
-  +   '<button class="btn hidden" id="bt-tudo" title="Refaz o carregamento do zero, ignorando o que já está aqui">Tudo</button>'
+  +   '<button class="btn btn-primary" id="bt-carregar">'+icon("refresh",14,"ic-load")+' Atualizar</button>'
   +   '<button class="btn hidden" id="bt-parar">'+icon("x",14)+' Parar</button>'
   +   '<div class="seg hidden" id="seg-modo">'
   +     '<span class="seg-lab">Replicação</span>'
@@ -1859,7 +1889,6 @@ function montarShell(){
   + '<div class="painel on" id="painel-tabela">'
   +   '<section class="resumo hidden" id="resumo"></section>'
   +   '<div class="toolbar hidden" id="toolbar">'
-  +     '<div class="busca">'+icon("search",13)+'<input id="in-busca" placeholder="Filtrar"></div>'
   +     '<div class="dd"><button class="btn" id="bt-colunas">'+icon("table",14)+' Colunas <span class="contador" id="ct-colunas"></span></button>'
   +       '<div class="pop hidden" id="pop-colunas"><div class="pop-cab">Colunas exibidas na tabela.</div>'
   +       '<div class="pop-acoes"><button data-cols="todas">Mostrar todas</button><button data-cols="essencial">Só o essencial</button></div>'
@@ -1899,17 +1928,6 @@ function montarShell(){
   +         '<input id="in-busca-pessoa" placeholder="Digite o nome…"></div>'
   +         '<div class="pop-lista" id="pop-pessoa-lista"></div></div>'
   +     '</div>'
-  +     '<div class="dd" id="dd-atualizar-pessoa">'
-  +       '<button class="btn" id="bt-atualizar-pessoa" title="Conferir no Jira as tarefas de uma pessoa ou de todas">'
-  +       icon("refresh",14)+' Atualizar</button>'
-  +       '<div class="pop hidden" id="pop-atualizar-pessoa"><div class="pop-cab">Confere no Jira as tarefas de uma '
-  +         'pessoa e traz as novas, mesclando no mesmo pacote que as outras abas leem. Pede ao Jira só o que '
-  +         'mudou desde a última vez que ela foi conferida. Escolha uma pessoa, ou '
-  +         '<b>Todas as pessoas</b> para atualizar o projeto inteiro — o que demora bem mais.</div>'
-  +         '<div class="pop-search">'+icon("search",13)+'<input id="in-busca-atualizar" placeholder="Digite o nome…"></div>'
-  +         '<div class="pop-lista" id="pop-atualizar-pessoa-lista"></div></div>'
-  +     '</div>'
-  +     '<button class="btn hidden" id="bt-tudo-pessoa">Tudo</button>'
   +     '<div style="display:flex;align-items:center;gap:10px;">'
   +       '<div class="trilha estreita"><div class="trilha-cheia" id="trilha-cheia" style="width:0%"></div></div>'
   +       '<span class="trilha-txt" id="trilha-txt"></span></div>'
@@ -1935,7 +1953,6 @@ function montarShell(){
   +     '<button class="btn" id="bt-so-prontas" title="Mostra apenas a fila de teste">'+icon("sparkles",14)+' Só prontas</button>'
   +     botaoColunas("checklist")
   +     '<div class="toolbar-dir" id="cl-toolbar-dir">'
-  +       '<button class="btn hidden" id="bt-parar-pessoa" title="Interromper a atualização em andamento">'+icon("x",14)+' Parar</button>'
   +       '<select id="sel-ordenacao" class="sel-inline" title="Como ordenar a lista. '
   +         'Prioridade vai da maior para a menor e desempata pela data de entrega mais '
   +         'distante; a ordem definida é a que se arrasta aqui e também vale para todo o time.">'
@@ -1957,11 +1974,6 @@ function montarShell(){
   +   '<div class="cl-head">'
   +     '<div><div class="rotulo">Homologação geral</div>'
   +       '<div class="hg-sub" id="hg-sub"></div></div>'
-  /* "Atualizar FILA", e não "Atualizar": o botão da barra de cima, que confere
-     o projeto inteiro, continua nesta aba — dois botões com o mesmo nome na
-     mesma tela só fazem escolher no chute. O nome diz o escopo. */
-  +     '<button class="btn" id="bt-hg-atualizar" title="Confere no Jira a fila inteira: traz quem entrou, atualiza quem mudou e tira quem saiu — inclusive as que foram finalizadas">'
-  +       icon("refresh",14)+' Atualizar fila</button>'
   +     '<div style="display:flex;align-items:center;gap:10px;">'
   +       '<div class="trilha estreita"><div class="trilha-cheia" id="hg-trilha" style="width:0%"></div></div>'
   +       '<span class="trilha-txt" id="hg-trilha-txt"></span></div>'
@@ -2009,9 +2021,9 @@ function montarShell(){
   +   '</div>'
   + '</div>';
 
-  ["bt-carregar","bt-tudo","bt-parar","topo-stats","aviso","resumo","toolbar","bt-replicar",
+  ["bt-carregar","bt-parar","topo-stats","aviso","resumo","toolbar","bt-replicar",
    "seg-modo","bt-modo-manual","bt-modo-auto",
-   "in-busca","bt-limpar","cont-linhas","bt-export","bt-colunas","pop-colunas","lista-colunas","ct-colunas",
+   "bt-limpar","cont-linhas","bt-export","bt-colunas","pop-colunas","lista-colunas","ct-colunas",
    "bt-status","pop-status","lista-status","ct-status",
    "pop-multi","multi-cab","in-busca-multi","lista-multi","bt-multi-todos","bt-multi-ext",
    "scroll","tabela","colgroup","thead","tbody","vazio","rodape","cx-versao","sel-versao",
@@ -2019,15 +2031,14 @@ function montarShell(){
    "hg-sub","hg-trilha","hg-trilha-txt","hg-pills","in-busca-hg","sel-hg-versao","sel-hg-status",
    "bt-hg-pendentes","hg-cont","hg-list","hg-rows","hg-cols",
    "bt-hg-add","pop-hg-add","pop-hg-add-lista","in-busca-hg-add","hg-add-cab","bt-hg-fora","ct-hg-fora",
-   "bt-hg-atualizar","bt-hg-grava-nao","bt-hg-grava-sim",
+   "bt-hg-grava-nao","bt-hg-grava-sim",
    "hg-lote","hg-lote-msg","bt-hg-descartar","bt-hg-aplicar",
    "bt-pessoa","pop-pessoa","pop-pessoa-lista","in-busca-pessoa","pessoa-iniciais","pessoa-nome","pessoa-sub",
-   "bt-atualizar-pessoa","pop-atualizar-pessoa","pop-atualizar-pessoa-lista","in-busca-atualizar",
    "trilha-cheia","trilha-txt","state-pills","in-busca-cl",
    "bt-cl-status","pop-cl-status","pop-cl-status-lista","ct-cl-status",
    "bt-teste","pop-teste","pop-teste-lista","ct-teste",
    "bt-feito","pop-feito","pop-feito-lista","ct-feito",
-   "bt-so-prontas","sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir","bt-parar-pessoa","bt-tudo-pessoa"
+   "bt-so-prontas","sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir"
   ].forEach(function(id){ el[id]=document.getElementById(id); });
 }
 
@@ -2051,30 +2062,15 @@ function renderTopo(){
   el["bt-parar"].classList.toggle("hidden", !state.carregando);
   el["bt-parar"].disabled = state.cancelar;
   el["bt-parar"].innerHTML = state.cancelar ? "Parando…" : icon("x",14)+" Parar";
-  /* Com dados na mao o botao principal vira incremental; "Tudo" fica ao lado
-     para quando for preciso refazer do zero. */
-  var incremental = state.tarefas.length>0 && !!state.ultimoSync;
-  el["bt-carregar"].innerHTML = icon("refresh",14,"ic-load"+(state.carregando?" spin":""))
-    + (incremental ? " Atualizar" : " Carregar");
+  /* Um único botão de atualizar, o da barra, em todas as abas de tarefas.
+     Com dados na mão ele pede ao Jira só as tarefas alteradas desde a última
+     atualização; sem dados (ou parado há mais de um mês) traz o projeto todo. */
+  var incremental = state.tarefas.length>0 && janelaMinutos(state.syncGeral) !== null;
+  el["bt-carregar"].innerHTML = icon("refresh",14,"ic-load"+(state.carregando?" spin":""))+" Atualizar";
   el["bt-carregar"].title = incremental
-    ? "Busca no Jira só o que mudou desde o último carregamento"
+    ? "Busca no Jira só as tarefas alteradas desde "+fmtDataHora(state.syncGeral)
     : "Traz todas as tarefas do projeto";
-  /* Na Checklist e na Homologação a própria aba já tem um "Atualizar" — por
-     pessoa lá, da fila aqui. Dois botões com o mesmo nome na mesma tela só
-     fazem a pessoa escolher no chute, então o de cima some.
-     Só quando há dados, porém: sem nada carregado ele ainda diz "Carregar", é
-     a única porta de entrada, e é para ele que o estado vazio das duas abas
-     manda clicar. */
-  var abaTemAtualizar = state.aba==="checklist" || state.aba==="homolog";
-  el["bt-carregar"].classList.toggle("hidden", state.aba==="ponto" || (abaTemAtualizar && incremental));
-  /* "Tudo" só some junto na Checklist, onde o menu da aba já oferece "Todas as
-     pessoas" — que É a atualização do projeto inteiro, e ali em cima ele
-     ficaria sozinho sem dizer nada. Na Homologação não há equivalente: o botão
-     da aba confere a FILA, então o "Tudo" é a única porta para refazer o
-     projeto sem trocar de aba, e fica. */
-  var tudoDuplicado = state.aba==="checklist" && incremental;
-  el["bt-tudo"].classList.toggle("hidden", !incremental || tudoDuplicado || state.aba==="ponto");
-  el["bt-tudo"].disabled = state.carregando;
+  el["bt-carregar"].classList.toggle("hidden", state.aba==="ponto");
 
   /* Os dois seletores saem dos dados carregados — nao ha mais campo livre,
      entao nao da pra pedir uma versao ou um nome que nao existe. */
@@ -2099,12 +2095,6 @@ function renderTopo(){
   }
   el["topo-stats"].innerHTML = h;
   renderReplicar();
-  /* Os botoes da checklist tambem acompanham o carregamento: e por aqui que o
-     "Parar" dela aparece enquanto uma atualizacao por pessoa esta rodando. */
-  if(el["bt-parar-pessoa"]) renderClToolbarToggles();
-  /* Mesma razão do de cima: é por aqui que o botão da fila acompanha o
-     carregamento, já que renderHomolog() não roda a cada página. */
-  if(el["bt-hg-atualizar"]) el["bt-hg-atualizar"].disabled = state.carregando;
 
   var prontas = clDerivados().resumo.teste;
   if(prontas>0){ el["badge-cl"].textContent = prontas; el["badge-cl"].classList.remove("hidden"); }
@@ -2505,7 +2495,7 @@ function renderTabela(){
     el["vazio"].classList.remove("hidden");
     el["vazio"].innerHTML = '<span class="vazio-icn">'+icon("table",24)+'</span>'
       + '<h3>Nada carregado ainda</h3>'
-      + '<p>Clique em <b>Carregar</b> no topo para trazer todas as tarefas do projeto. '
+      + '<p>Clique em <b>Atualizar</b> no topo para trazer todas as tarefas do projeto. '
       + 'Depois escolha as colunas, os status e os filtros de cada coluna.</p>';
     return;
   }
@@ -2812,43 +2802,6 @@ function renderPessoaLista(){
     };
   });
 }
-function pessoasFiltradasParaAtualizar(){
-  var pessoas = pessoasLista().filter(function(p){ return p[0] !== SEM_PESSOA; });
-  var q = norm(state.clBuscaAtualizar);
-  var lista = pessoas.map(function(p){return {nome:p[0],rotulo:p[0],qtd:p[1]};});
-  if(q) lista = lista.filter(function(p){ return norm(p.rotulo).indexOf(q)!==-1; });
-  return lista;
-}
-function renderAtualizarPessoaLista(){
-  var lista = pessoasFiltradasParaAtualizar();
-  /* "Todas as pessoas" fica sempre no topo: é uma ação, não um item da lista,
-     e o campo de busca vem pré-preenchido com a pessoa selecionada — se
-     dependesse do filtro, a opção ficaria escondida no caso mais comum. */
-  var html = '<button class="pop-item on" data-pa-todas="1">'
-    + icon("rotate",13)
-    + '<span style="flex:1;min-width:0;">Todas as pessoas</span>'
-    + '<span class="mono cel-faint" style="font-size:var(--fs-xs);">'+totalAtivo()+'</span></button>'
-    + '<div style="height:1px;background:var(--border);margin:var(--sp-1) var(--sp-2);"></div>';
-  html += lista.length
-    ? lista.map(function(p,i){
-        return '<button class="pop-item'+(i===state.clDestaqueAtualizar?" hi":"")+'" data-pa="'+encodeURIComponent(p.nome)+'">'
-          + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(p.rotulo)+'</span>'
-          + '<span class="mono cel-faint" style="font-size:var(--fs-xs);">'+p.qtd+'</span></button>';
-      }).join("")
-    : '<div class="pop-empty">Ninguém com esse nome</div>';
-  el["pop-atualizar-pessoa-lista"].innerHTML = html;
-
-  function fecharMenu(){ el["pop-atualizar-pessoa"].classList.add("hidden"); fecharTodosPopovers(); }
-  var btnTodas = el["pop-atualizar-pessoa-lista"].querySelector("[data-pa-todas]");
-  if(btnTodas) btnTodas.onclick = function(){ fecharMenu(); sincronizarTodasPessoas(); };
-  el["pop-atualizar-pessoa-lista"].querySelectorAll("[data-pa]").forEach(function(btn){
-    btn.onclick = function(){
-      var nome = decodeURIComponent(btn.getAttribute("data-pa"));
-      fecharMenu();
-      sincronizarPessoa(nome);
-    };
-  });
-}
 
 function corProgresso(pct){
   var hue = Math.max(0, Math.min(100, pct)) * 1.2;   // 0=vermelho, 100=verde (hue 120)
@@ -2946,18 +2899,6 @@ function renderStatusPanels(){
 
 function renderClToolbarToggles(){
   el["bt-so-prontas"].className = state.clSoProntas ? "btn btn-primary" : "btn";
-  el["bt-parar-pessoa"].classList.toggle("hidden", !state.carregando);
-  el["bt-parar-pessoa"].disabled = state.cancelar;
-  el["bt-atualizar-pessoa"].disabled = state.carregando;
-  /* "Tudo" só aparece quando há uma janela para ignorar — e só para a pessoa
-     que está na tela, que é de quem a lista fala. Sem carimbo o "Atualizar" já
-     faz a carga completa, e o botão seria dois nomes para a mesma coisa. */
-  var alvo = (state.pessoa !== TODOS && state.pessoa !== SEM_PESSOA) ? state.pessoa : null;
-  var temJanela = !!alvo && state.tarefas.length > 0 && janelaMinutos(frescorDaPessoa(alvo)) !== null;
-  el["bt-tudo-pessoa"].classList.toggle("hidden", !temJanela);
-  el["bt-tudo-pessoa"].disabled = state.carregando;
-  if(temJanela) el["bt-tudo-pessoa"].title =
-    "Refaz do zero as tarefas de "+alvo+", ignorando o que já está aqui";
 }
 function renderRevivePill(){
   var d = clDerivados();
@@ -3048,7 +2989,7 @@ function renderClList(){
     }
     el["cl-rows"].innerHTML = '<div class="vazio"><span class="vazio-icn">'+icon("list",24)+'</span>'
       + '<h3>Nada para mostrar aqui</h3><p>'
-      + (semTarefas ? 'Clique em <b>Carregar</b> no topo para trazer as tarefas do projeto '+PROJETO+'.'
+      + (semTarefas ? 'Clique em <b>Atualizar</b> no topo para trazer as tarefas do projeto '+PROJETO+'.'
                     : 'Troque a pessoa, limpe o filtro ou desligue o "Só prontas".')
       + '</p></div>';
     return;
@@ -3746,16 +3687,10 @@ function renderHomolog(){
     + statusNaFila.map(function(s){ return '<option value="'+esc(s)+'">'+esc(s)+'</option>'; }).join("");
   el["sel-hg-status"].value = state.hgStatus;
   el["bt-hg-pendentes"].classList.toggle("btn-on", state.hgSoPendentes);
-  el["bt-hg-atualizar"].disabled = state.carregando;
   el["bt-hg-grava-nao"].classList.toggle("on", !hgGravaJira());
   el["bt-hg-grava-sim"].classList.toggle("on", hgGravaJira());
   if(hgGravaJira() && state.aba === "homolog") carregarVersoesJira(false);
   renderLote();
-  /* Sem nada carregado ele não aparece: conferir a fila traria só as algumas
-     dezenas em homologação e deixaria o painel com um projeto pela metade — e
-     o estado vazio desta aba manda clicar em "Carregar" no topo, que continua
-     visível justamente nesse caso. */
-  el["bt-hg-atualizar"].classList.toggle("hidden", !state.tarefas.length);
 
   /* O botão das removidas só aparece quando há o que mostrar — e continua
      aparecendo enquanto a vista está aberta, senão ele sumiria debaixo do
@@ -3797,7 +3732,7 @@ function renderHomolog(){
       + (state.hgVerFora
           ? 'Ninguém tirou tarefa da fila neste recorte. O <b>×</b> no fim de cada linha tira, e daqui ela volta.'
           : semTarefas
-            ? 'Clique em <b>Carregar</b> no topo para trazer as tarefas do projeto '+PROJETO+'.'
+            ? 'Clique em <b>Atualizar</b> no topo para trazer as tarefas do projeto '+PROJETO+'.'
             : tudoTestado
               ? 'As '+d.base.length+' tarefas deste recorte já estão marcadas como testadas em homologação geral. '
                 + 'Desligue o <b>Só não testadas</b> para vê-las.'
@@ -4181,113 +4116,6 @@ function restaurarNaFila(key){
   renderHomolog(); renderTopo();
 }
 
-/* ===================== atualizar a fila de homologação =====================
-   Duas perguntas, como a sincronização por pessoa e pelo mesmo motivo — uma
-   sozinha é cega para metade do movimento:
-     1. quem está na fila pelo STATUS hoje  ->  status in (…)
-     2. quem está na fila AQUI agora        ->  key in (<chaves da fila>)
-   A 1 traz quem ENTROU desde a última conferida. A 2 traz quem SAIU — e é ela
-   que faz a tarefa finalizada sumir da tela: perguntando só pelo status, a que
-   deixou de tê-lo simplesmente não volta na resposta, e mesclar() nunca toca em
-   chave ausente, então ela ficaria na fila para sempre.
-   Sem janela de `updated` de propósito: a fila tem algumas dezenas de linhas
-   (35 na leitura de hoje), então pedir todas custa poucas idas ao Jira e
-   dispensa carimbo de frescor — que seria mais uma coisa para ficar errada em
-   troca de quase nada. Aqui "todas as tarefas da aba" é literal.
-   A base é hgDerivados().todas, o recorte CHEIO da vista aberta — e não o que
-   sobrou dos filtros de versão, status e busca. Filtro é lente, não escopo: com
-   uma versão selecionada, o resto da fila nunca mais seria conferido, e a
-   finalizada de fora daquele recorte não sairia. */
-/* So STATUS_HOMOLOG, sem o "Pronta para Merge": o Jira recusa a consulta
-   INTEIRA quando um valor de status in (...) nao existe, e esse nome sumiu do
-   workflow (22/10/2026 — "O valor 'Pronta para Merge' nao existe para o campo
-   'status'"). Nos conjuntos locais ele pode ficar: la so compara texto. */
-function jqlStatusHomolog(){
-  var lista = STATUS_HOMOLOG;
-  return 'project = '+PROJETO+' AND status in ("'+lista.join('","')+'")';
-}
-function atualizarHomologacao(){
-  if(!jiraDisponivel()){
-    avisar("err","Abra Conexão para configurar o acesso ao Jira.");
-    return;
-  }
-  if(state.carregando) return;
-
-  var base = hgDerivados().todas;
-  var chaves = base.map(function(t){ return t.key; }).filter(function(k){ return RE_CHAVE.test(k); });
-
-  var consultas = [{jql:jqlStatusHomolog(), rotulo:"as tarefas em homologação"}];
-  for(var i=0;i<chaves.length;i+=SAIDAS_POR_CONSULTA){
-    var pedaco = chaves.slice(i, i+SAIDAS_POR_CONSULTA);
-    consultas.push({jql:'project = '+PROJETO+' AND key in ("'+pedaco.join('","')+'")',
-                    rotulo:"as "+pedaco.length+" tarefa(s) que estão na fila aqui"});
-  }
-
-  /* Retrato do ANTES: quem estava na fila e com que status. Depois da mescla o
-     valor antigo não existe mais, então contar o que mudou só é possível daqui. */
-  var antes = Object.create(null);
-  base.forEach(function(t){ antes[t.key] = t.status || ""; });
-
-  var colhidas = [], vistas = Object.create(null), interrompeu = false;
-
-  function passo(i){
-    if(interrompeu || i >= consultas.length){ fechar(); return; }
-    carregarPorJql(consultas[i].jql, consultas[i].rotulo, function(lista, total, info){
-      lista.forEach(function(t){ if(!vistas[t.key]){ vistas[t.key] = true; colhidas.push(t); } });
-      /* O "Parar" zera a cada carregarPorJql: quebrar a corrente aqui é o que
-         faz o clique valer para a atualização inteira. */
-      if(info.interrompido) interrompeu = true;
-      passo(i+1);
-    });
-  }
-
-  function fechar(){
-    if(!colhidas.length){
-      avisar(interrompeu ? "info" : "info",
-        interrompeu ? "Interrompido antes de conferir a fila."
-                    : "O Jira não devolveu nenhuma tarefa para a fila de homologação.");
-      renderTudo();
-      return;
-    }
-    mesclar(colhidas);
-    salvar();
-    inicializarCheck();
-    revivarSeNecessario();
-
-    /* Quem está na fila DEPOIS, pela mesma regra da vista aberta. É a
-       comparação com `antes` que diz o que entrou e o que saiu — e não o
-       status em si, porque hgFora e hgExtra também decidem. */
-    var agora = Object.create(null);
-    (state.hgVerFora ? tarefasForaDaFila() : tarefasHomolog())
-      .forEach(function(t){ agora[t.key] = true; });
-
-    var mudouStatus = 0, sairam = 0, finalizadas = 0, entraram = 0, eram = 0;
-    Object.keys(antes).forEach(function(k){
-      eram++;
-      var t = tarefaPorChave(k);
-      if(t && (t.status||"") !== antes[k]) mudouStatus++;
-      if(!agora[k]){
-        sairam++;
-        if(t && faseDe(t) === "final") finalizadas++;
-      }
-    });
-    Object.keys(agora).forEach(function(k){ if(antes[k] === undefined) entraram++; });
-
-    var partes = [];
-    if(entraram)    partes.push(entraram+" nova(s) na fila");
-    if(sairam)      partes.push(sairam+" fora da fila"
-                      + (finalizadas ? " ("+finalizadas+" finalizada(s))" : ""));
-    if(mudouStatus) partes.push(mudouStatus+" com status novo");
-    avisar("ok", (interrompeu ? "Interrompido. " : "")
-      + (partes.length
-          ? "Fila conferida no Jira: "+partes.join(", ")+"."
-          : "Fila conferida no Jira: nada mudou nas "+eram+" tarefa(s)."));
-    renderTudo();
-  }
-
-  passo(0);
-}
-
 /* Sem nada digitado a lista traz o que está PERTO da fila (em teste), e não o
    projeto inteiro: são mais de dez mil tarefas, e uma lista com todas não
    ajuda a escolher nem cabe no DOM. Digitando, procura em todas. */
@@ -4374,228 +4202,6 @@ function salvarObsHomolog(key, texto){
      recriado igual, e a linha piscaria sem motivo. */
 }
 
-/* ===================== atualizar a checklist no Jira =====================
-   Reaproveita o carregador do painel em vez de abrir um segundo caminho de
-   dados: o resultado é MESCLADO no mesmo pacote que as outras abas leem, que
-   é o que mantém as três abas concordando entre si. */
-function sincronizarPessoa(nome){ atualizarChecklistPessoa(nome); }
-function sincronizarTodasPessoas(){ atualizarChecklistPessoa(null); }
-/* O "Tudo" da faixa da Checklist: refaz a pessoa do zero, ignorando a janela.
-   Mesmo papel do "Tudo" da barra de cima em relação ao "Atualizar" dela. */
-function sincronizarPessoaCompleto(nome){ atualizarChecklistPessoa(nome, true); }
-
-/* O ponto cego da sincronização por pessoa: a JQL pergunta "o que é do Arthur
-   HOJE", então a tarefa que passou para outro analista simplesmente NÃO VEM na
-   resposta — e mesclar() só sobrescreve quem veio e acrescenta quem é novo,
-   nunca toca em chave ausente. A cópia local seguia dizendo "Arthur" para
-   sempre, e como a lista da aba filtra por esse campo (tarefasDaPessoa), a
-   tarefa repassada ficava presa na lista de quem a entregou. Atualizar pelo
-   Arthur não resolvia nem podia: a consulta é cega justamente para o que saiu.
-
-   A resposta por pessoa é o conjunto COMPLETO dela, então quem está aqui como
-   dela e não voltou saiu. O que se faz com essas chaves é REBUSCÁ-LAS, não
-   deduzir: daqui não dá para saber para quem a tarefa foi, e apagar o analista
-   na mão poria o painel a inventar um dado que o Jira tem. São poucas chaves —
-   custa uma chamada. */
-var SAIDAS_POR_CONSULTA = 100;
-/* Só chave com forma de chave entra na JQL: o `key in (...)` é montado por
-   concatenação, e dado torto vindo do cache viraria consulta torta. */
-var RE_CHAVE = /^[A-Z][A-Z0-9_]*-[0-9]+$/;
-function conferirSaidasDaPessoa(nome, lista, aoFim){
-  var veio = Object.create(null);
-  lista.forEach(function(t){ veio[t.key] = true; });
-  /* Compara com o valor CRU do campo, e não com (testAnalyst||SEM_PESSOA): a
-     sincronização por pessoa nunca tem SEM_PESSOA como alvo. */
-  var saidas = [];
-  state.tarefas.forEach(function(t){
-    if(t.testAnalyst === nome && !veio[t.key] && RE_CHAVE.test(t.key)) saidas.push(t.key);
-  });
-  if(!saidas.length){ aoFim(0); return; }
-
-  var corrigidas = 0;
-  function terminar(){
-    if(corrigidas){ salvar(); inicializarCheck(); }
-    aoFim(corrigidas);
-  }
-  function lote(i){
-    if(i >= saidas.length){ terminar(); return; }
-    var pedaco = saidas.slice(i, i + SAIDAS_POR_CONSULTA);
-    var jql = 'project = '+PROJETO+' AND key in ("'+pedaco.join('","')+'")';
-    carregarPorJql(jql, pedaco.length+" tarefa(s) que saíram de "+nome, function(l2, tot2, info2){
-      if(!info2.vazio && l2.length){
-        /* Conta quem REALMENTE mudou de analista — é esse o número que
-           interessa relatar, não quantas linhas o Jira devolveu. */
-        l2.forEach(function(t){ if(t.testAnalyst !== nome) corrigidas++; });
-        mesclar(l2);
-      }
-      /* Nem por chave o Jira devolveu: saíram do projeto ou foram apagadas.
-         Não mexo nelas aqui — quem resolve isso é o Tudo, e conferirTotal()
-         já denuncia a divergência. */
-      if(info2.interrompido){ terminar(); return; }
-      lote(i + SAIDAS_POR_CONSULTA);
-    });
-  }
-  lote(0);
-}
-
-/* ---------- sincronizacao por pessoa EM JANELA ----------
-   O caminho completo abaixo pede todas as tarefas que sao da pessoa hoje. No
-   maior caso do projeto sao 638, das quais 40 aparecem na aba: o resto e
-   Finalizada, status oculto, que vem inteiro do Jira so para ser descartado na
-   tela. Em paginas de ~5 issues isso da ~130 idas ao Jira para atualizar 40
-   linhas.
-
-   Com janela sao duas perguntas, e as DUAS precisam existir:
-     1. o que e dela HOJE e mudou   -> cf[10048] = nome        AND updated >= -Nm
-     2. o que era dela AQUI e mudou -> key in (<chaves locais>) AND updated >= -Nm
-   A segunda e o que fecha o ponto cego descrito acima, e sem ela a janela seria
-   uma REGRESSAO: com ela a resposta deixa de ser o conjunto completo da pessoa,
-   entao conferirSaidasDaPessoa() leria toda tarefa fora da janela como "saiu" e
-   rebuscaria as 638 por chave — mais lento do que nao ter janela nenhuma. Pela
-   consulta por chave a tarefa que trocou de analista volta JA com o analista
-   novo (mudar o campo carimba o `updated`), e mesclar() a tira da lista da
-   pessoa sozinha, que e exatamente o servico da conferencia de saidas.
-
-   A janela sai de max(syncGeral, syncPessoa[nome]) — o momento mais recente em
-   que ESTA pessoa foi conhecida por inteiro. Sem esse carimbo, ou com ele velho
-   demais, cai na carga completa de sempre. */
-function chavesLocaisDaPessoa(nome){
-  var ks = [];
-  state.tarefas.forEach(function(t){
-    if(t.testAnalyst === nome && RE_CHAVE.test(t.key)) ks.push(t.key);
-  });
-  return ks;
-}
-function frescorDaPessoa(nome){
-  var melhor = null;
-  [state.syncGeral, (state.syncPessoa||{})[nome]].forEach(function(s){
-    if(!s) return;
-    var v = new Date(s).getTime();
-    if(isFinite(v) && (melhor === null || v > melhor)) melhor = v;
-  });
-  return melhor === null ? null : new Date(melhor).toISOString();
-}
-function atualizarPessoaEmJanela(nome, escapado, desde, minutos){
-  var janela = ' AND updated >= "-'+minutos+'m"';
-  var chaves = chavesLocaisDaPessoa(nome);
-  var consultas = [{jql:'project = '+PROJETO+' AND cf[10048] = "'+escapado+'"'+janela,
-                    rotulo:"as mudanças nas tarefas de "+nome}];
-  for(var i=0;i<chaves.length;i+=SAIDAS_POR_CONSULTA){
-    var pedaco = chaves.slice(i, i+SAIDAS_POR_CONSULTA);
-    consultas.push({jql:'project = '+PROJETO+' AND key in ("'+pedaco.join('","')+'")'+janela,
-                    rotulo:"mudanças em "+pedaco.length+" tarefa(s) que estão aqui com "+nome});
-  }
-
-  /* Quem era de quem ANTES, para contar as saídas depois da mescla. Contar
-     durante ela não daria: a mesma chave pode vir nas duas consultas, e na
-     segunda leitura o analista local já seria o novo. */
-  var antes = Object.create(null);
-  state.tarefas.forEach(function(t){ antes[t.key] = t.testAnalyst; });
-
-  var colhidas = [], vistas = Object.create(null), interrompeu = false;
-
-  function passo(i){
-    if(interrompeu || i >= consultas.length){ fechar(); return; }
-    carregarPorJql(consultas[i].jql, consultas[i].rotulo, function(lista, total, info){
-      lista.forEach(function(t){ if(!vistas[t.key]){ vistas[t.key] = true; colhidas.push(t); } });
-      /* O "Parar" zera em cada carregarPorJql, então quebrar a corrente aqui é
-         o que faz o clique valer para a sincronização inteira. */
-      if(info.interrompido) interrompeu = true;
-      passo(i+1);
-    });
-  }
-
-  function fechar(){
-    var r = colhidas.length ? mesclar(colhidas) : {novas:0, atualizadas:0};
-    var saiu = 0;
-    colhidas.forEach(function(t){ if(antes[t.key] === nome && t.testAnalyst !== nome) saiu++; });
-    /* Só carimba com a janela percorrida INTEIRA: parar no meio deixa um buraco
-       dentro dela, e o carimbo faria a janela seguinte começar depois desse
-       buraco — a mudança que ficou de fora nunca mais seria pedida. */
-    if(!interrompeu) carimbarPessoa(nome);
-    if(colhidas.length){
-      salvar();
-      inicializarCheck();
-      revivarSeNecessario();
-    } else {
-      /* Nada mudou: o carimbo novo fica guardado aqui, mas não vira publicação
-         — em modo automático isso recarregaria a tela de todo mundo para não
-         mostrar diferença nenhuma. */
-      salvarMeta();
-    }
-    if(interrompeu){
-      avisar("info","Interrompido. O que já tinha chegado foi aplicado, mas a janela de "+nome
-        +" não foi percorrida inteira — clique em Atualizar de novo.");
-    } else if(!colhidas.length){
-      avisar("ok","Nada mudou nas tarefas de "+nome+" desde "+fmtDataHora(desde)+".");
-    } else {
-      avisar("ok", r.atualizadas+" tarefa(s) de "+nome+" atualizada(s), "+r.novas+" nova(s)"
-        + (saiu ? ", e "+saiu+" que passaram para outro analista." : ".")
-        + " Conferido desde "+fmtDataHora(desde)+".");
-    }
-    renderTudo();
-  }
-
-  passo(0);
-}
-
-function atualizarChecklistPessoa(nome, completo){
-  if(!jiraDisponivel()){
-    avisar("err","Abra Conexão para configurar o acesso ao Jira.");
-    return;
-  }
-  if(state.carregando) return;
-  // Todas as pessoas = o projeto inteiro, pelo caminho incremental de sempre.
-  if(!nome){ atualizar(); return; }
-
-  var escapado = String(nome).replace(/\\/g,"\\\\").replace(/"/g,'\\"');
-  /* Só há janela para quem já esteve completo aqui: sem tarefa nenhuma
-     carregada, a consulta por chave não teria o que perguntar e o conjunto da
-     pessoa ainda precisa ser montado de uma vez. */
-  if(!completo && state.tarefas.length){
-    var desde = frescorDaPessoa(nome);
-    var minutos = janelaMinutos(desde);
-    if(minutos !== null){ atualizarPessoaEmJanela(nome, escapado, desde, minutos); return; }
-  }
-  var base = 'project = '+PROJETO+' AND cf[10048] = "'+escapado+'"';
-  carregarPorJql(base, "as tarefas de "+nome, function(lista, total, info){
-    if(info.vazio){
-      /* Zero não quer dizer "nada a fazer": se a pessoa tinha tarefas aqui,
-         TODAS saíram de uma vez — era o pior caso do ponto cego, e antes ele
-         passava direto. */
-      conferirSaidasDaPessoa(nome, [], function(saiu){
-        carimbarPessoa(nome);
-        if(saiu){
-          salvar();
-          avisar("ok", saiu+" tarefa(s) deixaram de ser de "+nome+" e saíram da lista dela.");
-        } else {
-          avisar("info","O Jira não devolveu nenhuma tarefa com "+nome+" como Analista de Testes.");
-        }
-        renderTudo();
-      });
-      return;
-    }
-    var r = mesclar(lista);
-    carimbarPessoa(nome);
-    salvar();
-    inicializarCheck();
-    revivarSeNecessario();
-    if(info.interrompido){
-      /* Resposta parcial: o que não veio pode ter ficado para trás no meio do
-         caminho, e não por ter mudado de dono. Inferir saída daqui tiraria da
-         lista tarefa que continua sendo da pessoa. */
-      avisar("info","Interrompido. "+lista.length+" de "+total+" tarefa(s) de "+nome+" aplicadas.");
-      renderTudo();
-      return;
-    }
-    conferirSaidasDaPessoa(nome, lista, function(saiu){
-      avisar("ok", r.atualizadas+" tarefa(s) de "+nome+" conferidas no Jira, "+r.novas+" nova(s)"
-        + (saiu ? ", e "+saiu+" que passaram para outro analista." : "."));
-      renderTudo();
-    });
-  });
-}
-
 function renderChecklistAll(){
   setTimeout(function(){ if(window.nimitz.refreshOrder) window.nimitz.refreshOrder(); },0);
   renderClCols();
@@ -4605,7 +4211,7 @@ function renderChecklistAll(){
 
 /* ===================== popovers da checklist ===================== */
 function fecharTodosPopovers(exceto){
-  ["pop-pessoa","pop-atualizar-pessoa","pop-cl-status","pop-teste","pop-feito","pop-hg-add"].forEach(function(id){
+  ["pop-pessoa","pop-cl-status","pop-teste","pop-feito","pop-hg-add"].forEach(function(id){
     if(id!==exceto && el[id]) el[id].classList.add("hidden");
   });
   document.querySelectorAll(".captura").forEach(function(o){o.remove();});
@@ -4657,9 +4263,11 @@ function exportar(){
 
 function ligarEventos(){
   el["bt-carregar"].onclick = function(){
-    if(state.tarefas.length && state.ultimoSync) atualizar(); else carregarTudo();
+    atualizar();
+    /* Na Homologação com gravação ligada, as versões permitidas do Jira também
+       eram renovadas pelo antigo "Atualizar fila". */
+    if(state.aba === "homolog" && hgGravaJira()) carregarVersoesJira(true);
   };
-  el["bt-tudo"].onclick = function(){ carregarTudo(); };
   el["sel-versao"].addEventListener("change", function(){
     state.versaoSel = el["sel-versao"].value;
     salvarPref(); renderTudo();
@@ -4668,9 +4276,6 @@ function ligarEventos(){
     state.cancelar = true; renderTopo();
     avisar("info","Interrompendo depois da página atual…");
   };
-  el["in-busca"].addEventListener("input", function(){
-    state.busca = el["in-busca"].value; renderTabela(); renderToolbar();
-  });
   (function(){
     var pendente = false;
     el["scroll"].addEventListener("scroll", function(){
@@ -4715,8 +4320,7 @@ function ligarEventos(){
     state.menuTab = null; fecharPopsTab();
   });
   el["bt-limpar"].onclick = function(){
-    state.busca=""; state.fase=null; state.filtros={}; state.statusSel=[];
-    el["in-busca"].value="";
+    state.fase=null; state.filtros={}; state.statusSel=[];
     salvarPref(); renderResumo(); renderToolbar(); cabecalho(); renderTabela();
   };
   el["bt-export"].onclick = exportar;
@@ -4742,7 +4346,6 @@ function ligarEventos(){
   });
   el["sel-hg-versao"].onchange = function(){ state.hgVersao = el["sel-hg-versao"].value; renderHomolog(); };
   el["sel-hg-status"].onchange = function(){ state.hgStatus = el["sel-hg-status"].value; renderHomolog(); };
-  el["bt-hg-atualizar"].onclick = function(){ atualizarHomologacao(); if(hgGravaJira()) carregarVersoesJira(true); };
   el["bt-hg-grava-nao"].onclick = function(){ trocarGravaJira(false); };
   el["bt-hg-grava-sim"].onclick = function(){ trocarGravaJira(true); };
   el["bt-hg-aplicar"].onclick = aplicarRascunho;
@@ -4808,34 +4411,6 @@ function ligarEventos(){
     else if(e.key==="Escape"){ fecharTodosPopovers(); }
   });
 
-  el["bt-tudo-pessoa"].onclick = function(){
-    if(state.pessoa !== TODOS && state.pessoa !== SEM_PESSOA) sincronizarPessoaCompleto(state.pessoa);
-  };
-  el["bt-atualizar-pessoa"].onclick = function(){
-    togglePop("pop-atualizar-pessoa", function(){
-      /* "Sem analista de teste" não é alguém consultável no Jira: pré-preencher
-         a busca com esse rótulo deixaria o menu sem nenhuma opção. */
-      var pre = (state.pessoa !== TODOS && state.pessoa !== SEM_PESSOA) ? state.pessoa : "";
-      state.clBuscaAtualizar = pre; el["in-busca-atualizar"].value = pre; state.clDestaqueAtualizar = 0;
-      renderAtualizarPessoaLista();
-      el["in-busca-atualizar"].focus(); el["in-busca-atualizar"].select();
-    });
-  };
-  el["in-busca-atualizar"].addEventListener("input", function(){
-    state.clBuscaAtualizar = el["in-busca-atualizar"].value; state.clDestaqueAtualizar = 0; renderAtualizarPessoaLista();
-  });
-  el["in-busca-atualizar"].addEventListener("keydown", function(e){
-    var lista = pessoasFiltradasParaAtualizar();
-    if(e.key==="ArrowDown"){ e.preventDefault(); state.clDestaqueAtualizar = Math.min(state.clDestaqueAtualizar+1, lista.length-1); renderAtualizarPessoaLista(); }
-    else if(e.key==="ArrowUp"){ e.preventDefault(); state.clDestaqueAtualizar = Math.max(state.clDestaqueAtualizar-1, 0); renderAtualizarPessoaLista(); }
-    else if(e.key==="Enter"){
-      e.preventDefault();
-      var p = lista[state.clDestaqueAtualizar];
-      if(p){ fecharTodosPopovers(); sincronizarPessoa(p.nome); }
-    }
-    else if(e.key==="Escape"){ fecharTodosPopovers(); }
-  });
-
   el["in-busca-cl"].addEventListener("input", function(){
     state.clBusca = el["in-busca-cl"].value; renderProgressoChecklist(); renderClList();
   });
@@ -4858,11 +4433,6 @@ function ligarEventos(){
 
   el["bt-so-prontas"].onclick = function(){
     state.clSoProntas = !state.clSoProntas; renderClToolbarToggles(); renderClList();
-  };
-  el["bt-parar-pessoa"].onclick = function(){
-    state.cancelar = true;
-    renderClToolbarToggles(); renderTopo();
-    avisar("info","Interrompendo depois da página atual…");
   };
   el["sel-ordenacao"].value = state.clOrdenacao;
   el["sel-ordenacao"].addEventListener("change", function(){
@@ -5124,6 +4694,8 @@ function horasPendentes(){
 function guardarHoras(){
   try{ localStorage.setItem(LS_HORAS, JSON.stringify(HORAS)); }
   catch(e){ HORAS = {}; try{ localStorage.removeItem(LS_HORAS); }catch(e2){} }
+  /* Fim de uma busca de horas: vale publicar, poupa as mesmas consultas aos outros. */
+  if(!horasRodando) agendarComp();
 }
 function buscarHoras(){
   var pend = horasPendentes(); if(!pend.length) return;
@@ -5155,6 +4727,180 @@ function buscarHoras(){
   })();
 }
 
+/* ===================== dados compartilhados =====================
+   O que veio do Jira (tarefas, carimbos de frescor e horas por pessoa) é o
+   mesmo para todo o time. Quem carrega ou atualiza publica o pacote no backend,
+   comprimido; quem abre o painel baixa pronto, e o Atualizar seguinte só pede
+   ao Jira o que mudou depois dele. O Registro (Ponto) não entra aqui, nem o que
+   é de cada pessoa: checklist, marcações, filtros e colunas.
+   Gravação com revisão: se outra pessoa publicou antes, o pacote dela é
+   mesclado com o daqui (por tarefa, vence a atualizada por último no Jira) e o
+   envio é refeito sobre a revisão nova, sem apagar o trabalho de ninguém. */
+var LS_COMP_REV = window.nimitz.storagePrefix+"compartilhadoRev";
+var COMP_ESPERA = 4000, COMP_CONSULTA = 60000;
+var COMP = {rev:0, timer:null, enviando:false, baixando:false, adotando:false, pendente:false,
+            desligado:false, falhas:0};
+try{ COMP.rev = Number(localStorage.getItem(LS_COMP_REV)) || 0; }catch(e){}
+function compDisponivel(){
+  return jiraDisponivel() && !COMP.desligado
+    && typeof CompressionStream === "function" && typeof DecompressionStream === "function";
+}
+function guardarRevComp(r){ COMP.rev = r; try{ localStorage.setItem(LS_COMP_REV, String(r)); }catch(e){} }
+function bytesParaB64(u8){
+  var s = "", P = 0x8000;
+  for(var i=0;i<u8.length;i+=P) s += String.fromCharCode.apply(null, u8.subarray(i, i+P));
+  return btoa(s);
+}
+function b64ParaBytes(b){
+  var s = atob(b), u = new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++) u[i] = s.charCodeAt(i);
+  return u;
+}
+function comprimir(txt){
+  return new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream("gzip")))
+    .arrayBuffer().then(function(b){ return bytesParaB64(new Uint8Array(b)); });
+}
+function descomprimir(b64){
+  return new Response(new Blob([b64ParaBytes(b64)]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+/* Datas do Jira vêm com fuso sem dois-pontos (-0300); comparar como texto
+   erraria entre fusos diferentes. */
+function instante(v){
+  if(!v) return 0;
+  var t = Date.parse(String(v).replace(/([+-]\d\d)(\d\d)$/, "$1:$2"));
+  return isFinite(t) ? t : 0;
+}
+function pacoteComp(){
+  return {v:1, tarefas:compactarTarefas(state.tarefas), total:state.total, ultimoSync:state.ultimoSync,
+          syncGeral:state.syncGeral, syncPessoa:state.syncPessoa, horas:HORAS};
+}
+function adotarComp(p, mesclarLocal){
+  var remotas = expandirTarefas(p.tarefas);
+  var syncPessoa = (p.syncPessoa && typeof p.syncPessoa === "object") ? Object.assign({}, p.syncPessoa) : {};
+  var syncGeral = p.syncGeral || p.ultimoSync || null, total = p.total, ultimoSync = p.ultimoSync || syncGeral;
+  if(mesclarLocal && state.tarefas.length){
+    var pos = Object.create(null);
+    remotas.forEach(function(t,i){ pos[t.key] = i; });
+    state.tarefas.forEach(function(t){
+      var i = pos[t.key];
+      if(i === undefined){ pos[t.key] = remotas.length; remotas.push(t); }
+      else if(instante(t.updated) > instante(remotas[i].updated)) remotas[i] = t;
+    });
+    Object.keys(state.syncPessoa || {}).forEach(function(n){
+      if(instante(state.syncPessoa[n]) > instante(syncPessoa[n])) syncPessoa[n] = state.syncPessoa[n];
+    });
+    if(instante(state.syncGeral) > instante(syncGeral)){ syncGeral = state.syncGeral; total = state.total; }
+    if(instante(state.ultimoSync) > instante(ultimoSync)) ultimoSync = state.ultimoSync;
+  }
+  var horas = p.horas && typeof p.horas === "object" ? p.horas : {};
+  Object.keys(horas).forEach(function(k){
+    var meu = HORAS[k], dele = horas[k];
+    if(!dele || !dele.h) return;
+    if(!meu || instante(dele.u) > instante(meu.u)) HORAS[k] = dele;
+  });
+  COMP.adotando = true;
+  try{
+    state.tarefas = remotas;
+    if(typeof total === "number") state.total = total;
+    state.syncGeral = syncGeral;
+    state.ultimoSync = ultimoSync;
+    state.syncPessoa = syncPessoa;
+    salvar();
+    guardarHoras();
+    inicializarCheck();
+    revivarSeNecessario();
+  } finally { COMP.adotando = false; }
+}
+function baixarComp(mesclarLocal){
+  COMP.baixando = true;
+  return window.nimitz.request("/api/shared/get", {}).then(function(r){
+    if(!r || !r.data) return null;
+    return descomprimir(r.data).then(function(txt){
+      /* Carga do Jira começou enquanto o pacote descia: adotar agora trocaria
+         a lista no meio dela. A próxima consulta traz de novo. */
+      if(state.carregando) return null;
+      adotarComp(JSON.parse(txt), mesclarLocal);
+      guardarRevComp(r.revision);
+      return r;
+    });
+  }).then(function(r){ COMP.baixando = false; return r; },
+          function(e){ COMP.baixando = false; throw e; });
+}
+function desligarSeSemRota(err){
+  /* Backend ainda sem a rota ou sem o banco: o painel segue como antes, só local. */
+  if(err && (err.status === 404 || err.status === 503)){ COMP.desligado = true; return true; }
+  return false;
+}
+function agendarComp(atraso){
+  if(!compDisponivel() || COMP.adotando) return;
+  COMP.pendente = true;
+  clearTimeout(COMP.timer);
+  COMP.timer = setTimeout(enviarComp, atraso == null ? COMP_ESPERA : atraso);
+}
+function enviarComp(){
+  COMP.timer = null;
+  if(!COMP.pendente || !compDisponivel()) return;
+  /* Pacote pela metade não sai: espera a carga e as horas terminarem. */
+  if(state.carregando || horasRodando || COMP.enviando || COMP.baixando){ agendarComp(); return; }
+  if(!state.tarefas.length){ COMP.pendente = false; return; }
+  COMP.enviando = true; COMP.pendente = false;
+  var base = COMP.rev;
+  comprimir(JSON.stringify(pacoteComp())).then(function(b64){
+    return window.nimitz.request("/api/shared/save", {data:b64, baseRevision:base, syncGeral:state.syncGeral});
+  }).then(function(m){
+    COMP.enviando = false; COMP.falhas = 0;
+    guardarRevComp(m.revision);
+  }).catch(function(err){
+    COMP.enviando = false;
+    if(desligarSeSemRota(err)) return;
+    if(err && err.status === 409 && COMP.falhas < 5){
+      COMP.falhas++;
+      /* Outra pessoa publicou antes: junta o dela com o daqui e reenvia. */
+      return baixarComp(true).then(function(){ agendarComp(300); renderTudo(); })
+        .catch(function(){ agendarComp(30000); });
+    }
+    COMP.falhas++;
+    if(COMP.falhas < 5) agendarComp(30000);
+    console.warn("Não deu para compartilhar os dados carregados:", msgErro(err));
+  });
+}
+function editandoAgora(){
+  var a = document.activeElement;
+  return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest && a.closest("#app"));
+}
+function conferirComp(inicio){
+  if(!compDisponivel() || COMP.baixando || COMP.enviando || state.carregando) return;
+  /* Trocar a lista embaixo de quem está digitando derrubaria o que ele escreve. */
+  if(!inicio && editandoAgora()) return;
+  window.nimitz.request("/api/shared/meta", {}).then(function(m){
+    if(!m.revision){
+      /* Ninguém publicou ainda: quem já tem dados aqui semeia o compartilhado. */
+      if(state.tarefas.length) agendarComp(1000);
+      return;
+    }
+    if(m.revision === COMP.rev && state.tarefas.length) return;
+    var tinha = state.tarefas.length;
+    return baixarComp(COMP.pendente).then(function(r){
+      if(!r) return;
+      renderTudo();
+      if(COMP.pendente) agendarComp();
+      avisar(inicio ? "info" : "ok", (tinha ? "Dados atualizados" : "Dados carregados")
+        +" do que "+(r.updatedBy || "outra pessoa")+" trouxe do Jira em "+fmtDataHora(r.updatedAt)
+        +(inicio ? ". Atualizar busca só o que mudou depois disso." : "."));
+    });
+  }).catch(function(err){
+    if(!desligarSeSemRota(err)) console.warn("Não deu para consultar os dados compartilhados:", msgErro(err));
+  });
+}
+function iniciarComp(){
+  if(!compDisponivel()) return;
+  conferirComp(true);
+  setInterval(function(){ if(document.visibilityState === "visible") conferirComp(false); }, COMP_CONSULTA);
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible") conferirComp(false);
+  });
+}
+
 /* ===================== início ===================== */
 montarShell();
 carregarLocal();
@@ -5168,9 +4914,10 @@ ligarColunasGrade();
 iniciarReplicacao();
 renderTudo();
 aplicarRetomada();
+iniciarComp();
 if(!jiraDisponivel()){
   avisar("info","Prévia sem conexão com o Jira. Abra Conexão para consultar dados atuais.");
 } else if(!state.tarefas.length){
-  avisar("info","Clique em Carregar para trazer todas as tarefas do projeto "+PROJETO+". Depois a aba Versões recorta por release, e a Checklist por analista.");
+  avisar("info","Clique em Atualizar para trazer todas as tarefas do projeto "+PROJETO+". Depois a aba Versões recorta por release, e a Checklist por analista.");
 }
 })();
