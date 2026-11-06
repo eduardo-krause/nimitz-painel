@@ -185,6 +185,13 @@ function showOrderStatus(message){
   }
   if(element) element.textContent=message;
 }
+// Aviso passageiro: some sozinho, a barra não fica com texto fixo.
+let orderStatusTimer=null;
+function flashOrderStatus(message){
+  showOrderStatus(message);
+  clearTimeout(orderStatusTimer);
+  orderStatusTimer=setTimeout(()=>showOrderStatus(''),3000);
+}
 state.canReorder = () => preview || (!!state.orderView && !!orders.get(state.orderView.person())?.ready && !orderSaving);
 state.refreshOrder = async (force=false) => {
   if(preview || !state.connected || !state.orderView || document.hidden || orderSaving || state.orderView.dragging()) return;
@@ -200,7 +207,7 @@ state.refreshOrder = async (force=false) => {
     const changed=!entry.ready || data.revision!==entry.revision;
     entry.revision=data.revision; entry.ready=true; entry.keys=data.keys;
     if(changed && !state.orderView.dragging() && !orderSaving) state.orderView.apply(person,data.keys);
-    if(state.orderView.person()===person) showOrderStatus(data.updatedBy ? 'Ordem compartilhada · '+data.updatedBy : 'Ordem compartilhada · arraste para definir');
+    if(state.orderView.person()===person && !orderSaving) showOrderStatus('');
   } catch(error) {
     entry.ready=false;
     showOrderStatus('Não foi possível sincronizar a ordem. Tente novamente.');
@@ -214,7 +221,7 @@ state.saveOrder = async (person,keys) => {
     const data=await state.request('/api/order/save',{person,keys,revision:entry.revision});
     entry.revision=data.revision; entry.keys=data.keys; entry.last=Date.now();
     state.orderView.apply(person,data.keys);
-    showOrderStatus('Ordem salva para a equipe');
+    flashOrderStatus('Ordem salva para a equipe');
   } catch(error) {
     orderSaving=false;
     await state.refreshOrder(true);

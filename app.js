@@ -410,7 +410,6 @@ var state = {
   pessoa: TODOS,
   check: Object.assign({}, CHECK_VAZIO),
   clBusca: "",
-  clSoProntas: false,
   /* Padrão é a "Ordem definida" — a que se arrasta na própria Checklist e que
      viaja para o time em check.ordem. Era o rank do Jira, mas a ordem combinada
      aqui é a que o time de fato segue; quem quiser o rank do board troca no
@@ -1951,7 +1950,6 @@ function montarShell(){
   +       '<div class="pop wide hidden" id="pop-feito"><div class="pop-cab">Tarefas nestes status já entram como '
   +       'feitas e vão para o fim da lista, riscadas. Se você desmarcar na mão, sua escolha prevalece.</div>'
   +       '<div class="pop-lista" id="pop-feito-lista"></div></div></div>'
-  +     '<button class="btn" id="bt-so-prontas" title="Mostra apenas a fila de teste">'+icon("sparkles",14)+' Só prontas</button>'
   +     botaoColunas("checklist")
   +     '<div class="toolbar-dir" id="cl-toolbar-dir">'
   +       '<select id="sel-ordenacao" class="sel-inline" title="Como ordenar a lista. '
@@ -2039,7 +2037,7 @@ function montarShell(){
    "bt-cl-status","pop-cl-status","pop-cl-status-lista","ct-cl-status",
    "bt-teste","pop-teste","pop-teste-lista","ct-teste",
    "bt-feito","pop-feito","pop-feito-lista","ct-feito",
-   "bt-so-prontas","sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir"
+   "sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir"
   ].forEach(function(id){ el[id]=document.getElementById(id); });
 }
 
@@ -2727,13 +2725,13 @@ var CL_CACHE = null;
 function clDerivados(){
   var c = CL_CACHE;
   if(c && c.tarefas===state.tarefas && c.check===state.check && c.pessoa===state.pessoa
-     && c.busca===state.clBusca && c.soProntas===state.clSoProntas && c.ordenacao===state.clOrdenacao
+     && c.busca===state.clBusca && c.ordenacao===state.clOrdenacao
      && c.sort===state.clSort){
     return c.valor;
   }
   var valor = clDerivadosCalc();
   CL_CACHE = {tarefas:state.tarefas, check:state.check, pessoa:state.pessoa, busca:state.clBusca,
-              soProntas:state.clSoProntas, ordenacao:state.clOrdenacao, sort:state.clSort, valor:valor};
+              ordenacao:state.clOrdenacao, sort:state.clSort, valor:valor};
   return valor;
 }
 function clDerivadosCalc(){
@@ -2751,7 +2749,6 @@ function clDerivadosCalc(){
   var q = norm(state.clBusca);
   var visiveis = noFiltro.filter(function(t){
     var est = estadoDe(t);
-    if(state.clSoProntas && est!=="teste") return false;
     if(q && norm([t.key,t.summary,t.status,t.squad,t.cliente,versoesTexto(t)].join(" ")).indexOf(q)===-1) return false;
     return true;
   });
@@ -2903,9 +2900,6 @@ function renderStatusPanels(){
   });
 }
 
-function renderClToolbarToggles(){
-  el["bt-so-prontas"].className = state.clSoProntas ? "btn btn-primary" : "btn";
-}
 function renderRevivePill(){
   var d = clDerivados();
   var existente = document.getElementById("bt-revividos");
@@ -4212,7 +4206,7 @@ function renderChecklistAll(){
   setTimeout(function(){ if(window.nimitz.refreshOrder) window.nimitz.refreshOrder(); },0);
   renderClCols();
   renderPessoaBotao(); renderProgressoChecklist(); renderStatusPanels();
-  renderClToolbarToggles(); renderRevivePill(); renderClList(); renderTopo();
+  renderRevivePill(); renderClList(); renderTopo();
 }
 
 /* ===================== popovers da checklist ===================== */
@@ -4438,9 +4432,6 @@ function ligarEventos(){
   el["bt-teste"].onclick = function(){ togglePop("pop-teste", renderStatusPanels); };
   el["bt-feito"].onclick = function(){ togglePop("pop-feito", renderStatusPanels); };
 
-  el["bt-so-prontas"].onclick = function(){
-    state.clSoProntas = !state.clSoProntas; renderClToolbarToggles(); renderClList();
-  };
   el["sel-ordenacao"].value = state.clOrdenacao;
   el["sel-ordenacao"].addEventListener("change", function(){
     state.clOrdenacao = el["sel-ordenacao"].value; renderClList();
