@@ -1858,7 +1858,7 @@ function montarShell(){
   document.getElementById("app").innerHTML =
     '<header class="topbar">'
   +   '<div class="brand"><img src="./nimitz-ship.svg" width="38" height="38" alt="Nimitz — navio" style="flex:none">'
-  +     '<span class="brand-txt"><b>Versões Nimitz</b><span>Controle de release</span></span></div>'
+  +     '<span class="brand-txt"><b>Versões Nimitz</b></span></div>'
   +   '<nav class="abas">'
   +     '<button class="aba-btn on" data-aba="tarefas">'+icon("table",14)+' Tarefas</button>'
   +     '<button class="aba-btn" data-aba="versoes">'+icon("tag",14)+' Versões</button>'
@@ -4273,6 +4273,7 @@ function exportar(){
 
 function ligarEventos(){
   el["bt-carregar"].onclick = function(){
+    horasParado = false; horasFalhas = 0; horasSemResposta = {};
     atualizar();
     /* Na Homologação com gravação ligada, as versões permitidas do Jira também
        eram renovadas pelo antigo "Atualizar fila". */
@@ -4683,57 +4684,80 @@ function aplicarHoras(){
   });
 }
 var COL_HORAS = ["horasAnalista","horasTeste","horasDev"];
-function horasEmUso(){
-  var naTabela = ["tarefas","versoes"].some(function(a){ return COL_HORAS.some(function(id){ return state.colunas[a].indexOf(id) === -1; }); });
-  var nasGrades = ["checklist","homolog"].some(function(g){ return COL_HORAS.some(function(id){ return state.colunas[g].extras.indexOf(id) !== -1; }); });
-  return naTabela || nasGrades;
+/* Só a aba aberta conta: buscar horas para colunas que ninguém está vendo
+   gastava milhares de consultas ao Jira antes de chegar na tela. */
+function horasNaAba(){
+  var a = state.aba;
+  if(a === "tarefas" || a === "versoes") return COL_HORAS.some(function(id){ return state.colunas[a].indexOf(id) === -1; });
+  if(a === "checklist" || a === "homolog") return COL_HORAS.some(function(id){ return state.colunas[a].extras.indexOf(id) !== -1; });
+  return false;
 }
+/* Tarefas da aba aberta, na ordem em que aparecem: as primeiras linhas da
+   tela são as primeiras a ganhar horas. */
+function tarefasDaTelaParaHoras(){
+  try{
+    if(state.aba === "tarefas" || state.aba === "versoes") return ordenadas(filtradas());
+    if(state.aba === "checklist") return clDerivados().noFiltro;
+    if(state.aba === "homolog") return hgDerivados().todas;
+  }catch(e){}
+  return [];
+}
+var HORAS_LOTE = 20, horasFalhas = 0, horasSemResposta = {};
 function agendarHoras(){
-  if(horasRodando || horasParado || !jiraDisponivel() || !horasEmUso()) return;
+  if(horasRodando || horasParado || !jiraDisponivel() || !horasNaAba()) return;
   clearTimeout(horasTimer);
   horasTimer = setTimeout(buscarHoras, 600);
 }
 function horasPendentes(){
-  return state.tarefas.filter(function(t){
+  return tarefasDaTelaParaHoras().filter(function(t){
     if(!t.tempoGasto || t.tempoGasto === "0" || (!t.analistaReq && !t.testAnalyst && !t.dev)) return false;
+    if(horasSemResposta[t.key] === t.updated) return false;
     var reg = HORAS[t.key];
     return !reg || reg.u !== t.updated;
   }).map(function(t){ return t.key; });
 }
 function guardarHoras(){
+  /* Sem espaço no navegador o que já veio continua na memória (e vai no
+     pacote compartilhado); apagar aqui fazia buscar tudo de novo, sem fim. */
   try{ localStorage.setItem(LS_HORAS, JSON.stringify(HORAS)); }
-  catch(e){ HORAS = {}; try{ localStorage.removeItem(LS_HORAS); }catch(e2){} }
+  catch(e){ try{ localStorage.removeItem(LS_HORAS); }catch(e2){} }
   /* Fim de uma busca de horas: vale publicar, poupa as mesmas consultas aos outros. */
   if(!horasRodando) agendarComp();
 }
+var horasDesenhoTimer = null;
+function redesenharHorasEmBreve(){
+  if(horasDesenhoTimer) return;
+  horasDesenhoTimer = setTimeout(function(){ horasDesenhoTimer = null; redesenharGrades(); }, 500);
+}
+/* Um lote por vez, sempre recalculado: trocar de aba ou de filtro no meio já
+   muda o que vem a seguir. Erro não desliga para sempre: espera e tenta de
+   novo, e só desiste depois de três seguidos (Atualizar religa). */
 function buscarHoras(){
-  var pend = horasPendentes(); if(!pend.length) return;
+  if(horasRodando || !horasNaAba()) return;
+  var lote = horasPendentes().slice(0, HORAS_LOTE);
+  if(!lote.length){ guardarHoras(); return; }
   horasRodando = true;
   var porChave = {}; state.tarefas.forEach(function(t){ porChave[t.key] = t; });
-  var lotes = []; for(var i=0;i<pend.length;i+=20) lotes.push(pend.slice(i, i+20));
-  var feitos = 0;
-  (function proximo(){
-    if(!lotes.length){
-      horasRodando = false; guardarHoras(); redesenharGrades(); return;
-    }
-    var lote = lotes.shift();
-    window.nimitz.request("/api/worklog-hours", {keys:lote}).then(function(r){
-      Object.keys(r.issues||{}).forEach(function(k){
-        var t = porChave[k], n = {};
-        Object.keys(r.issues[k]).forEach(function(acc){ if(r.names && r.names[acc]) n[acc] = r.names[acc]; });
-        HORAS[k] = {u:t ? t.updated : "", h:r.issues[k], n:n};
-      });
-      feitos += lote.length;
-      if(feitos % 200 < 20){ guardarHoras(); redesenharGrades(); }
-      proximo();
-    }).catch(function(e){
-      horasRodando = false; guardarHoras(); redesenharGrades();
-      /* Backend sem a rota (ainda não publicado) ou conexão caída: não insiste
-         a cada redesenho. Recarregar a página tenta de novo. */
-      horasParado = true;
-      console.warn("Horas por pessoa indisponíveis:", e && e.message);
+  window.nimitz.request("/api/worklog-hours", {keys:lote}).then(function(r){
+    horasRodando = false; horasFalhas = 0;
+    Object.keys(r.issues||{}).forEach(function(k){
+      var t = porChave[k], n = {};
+      Object.keys(r.issues[k]).forEach(function(acc){ if(r.names && r.names[acc]) n[acc] = r.names[acc]; });
+      HORAS[k] = {u:t ? t.updated : "", h:r.issues[k], n:n};
     });
-  })();
+    /* O Jira não respondeu por esta tarefa: não insiste nela até ela mudar. */
+    (r.failed||[]).forEach(function(k){ if(porChave[k]) horasSemResposta[k] = porChave[k].updated; });
+    redesenharHorasEmBreve();
+    buscarHoras();
+  }).catch(function(e){
+    horasRodando = false;
+    horasFalhas++;
+    console.warn("Horas por pessoa: falha ao consultar o Jira:", e && e.message);
+    if(e && e.status === 401){ horasParado = true; return; }
+    if(horasFalhas >= 3){ horasParado = true; guardarHoras(); redesenharGrades(); return; }
+    clearTimeout(horasTimer);
+    horasTimer = setTimeout(buscarHoras, Math.min(60000, (e && e.retryAfterMs) || 5000*horasFalhas));
+  });
 }
 
 /* ===================== dados compartilhados =====================
