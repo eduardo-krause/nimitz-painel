@@ -2199,7 +2199,8 @@ function renderToolbar(){
     + COLUNAS.filter(function(c){ return OCULTAS_PADRAO.indexOf(c.id)!==-1; }).map(item).join("");
   var mudou = state.ocultas.length !== OCULTAS_PADRAO.length
     || state.ocultas.some(function(id){ return OCULTAS_PADRAO.indexOf(id)===-1; });
-  el["ct-colunas"].textContent = mudou ? String(vis) : "";
+  /* Mesmo contador nas quatro abas: visíveis/total, como o do Status. */
+  el["ct-colunas"].textContent = vis+"/"+COLUNAS.length;
 
   var sts = statusPresentesTab();
   el["ct-status"].textContent = state.statusSel.length ? state.statusSel.length+"/"+sts.length : "";
@@ -4615,7 +4616,8 @@ function renderPopColunas(g){
     .map(function(c){ return itemColuna("data-gext", c.id, c.rot, cfg.extras.indexOf(c.id) !== -1); }).join("");
   lista.innerHTML = '<div class="pop-cab">Desta lista</div>' + nativas + '<div class="pop-cab">Mais campos do Jira</div>' + catalogo;
   var vis = GRADE_NATIVAS[g].length - cfg.ocultas.length + cfg.extras.length;
-  var ct = document.getElementById("ct-col-"+g); if(ct) ct.textContent = cfg.extras.length || cfg.ocultas.length ? String(vis) : "";
+  var total = GRADE_NATIVAS[g].length + COLUNAS.filter(function(c){ return !GRADE_JA_TEM[g][c.id]; }).length;
+  var ct = document.getElementById("ct-col-"+g); if(ct) ct.textContent = vis+"/"+total;
   var bt = document.getElementById("bt-col-"+g); if(bt) bt.classList.toggle("btn-on", !!(cfg.extras.length || cfg.ocultas.length));
 }
 function alternarColunaGrade(g, tipo, id){
