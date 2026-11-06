@@ -6,8 +6,15 @@ if (localHost) {
   local = await fetch('/local/status').then(r => r.ok ? r.json() : null).catch(() => null);
 }
 let settings = {};
-try { settings = JSON.parse(sessionStorage.getItem('nimitz-connection') || '{}'); } catch {}
-if (!settings.email) { settings = {}; sessionStorage.removeItem('nimitz-connection'); }
+// Login e token ficam salvos no navegador (localStorage) até "Sair e limpar dados".
+// Conexões antigas, só da aba (sessionStorage), são migradas na primeira abertura.
+try {
+  const saved = localStorage.getItem('nimitz-connection') || sessionStorage.getItem('nimitz-connection');
+  settings = JSON.parse(saved || '{}') || {};
+} catch {}
+try { sessionStorage.removeItem('nimitz-connection'); } catch {}
+if (!settings.email) { settings = {}; try { localStorage.removeItem('nimitz-connection'); } catch {} }
+else { try { localStorage.setItem('nimitz-connection', JSON.stringify(settings)); } catch {} }
 if (local) settings.url = location.origin;
 else if (API_URL) settings.url = API_URL;
 const preview = new URLSearchParams(location.search).has('preview');
@@ -94,6 +101,7 @@ $('connection-clear').onclick = async () => {
   if (!confirm('Sair e apagar os dados e marcações deste painel neste navegador?')) return;
   Object.keys(localStorage).filter(k => k.startsWith(state.storagePrefix)).forEach(k => localStorage.removeItem(k));
   Object.keys(sessionStorage).filter(k => k.startsWith('nimitz-')).forEach(k => sessionStorage.removeItem(k));
+  localStorage.removeItem('nimitz-connection');
   location.href = location.pathname;
 };
 $('connection-form').onsubmit = async event => {
@@ -111,7 +119,7 @@ $('connection-form').onsubmit = async event => {
       scoped:$('jira-scoped').checked,writes:$('jira-writes').checked,worklogs:$('jira-worklogs').checked};
     if (!candidate.token && candidate.email === settings.email && candidate.url === settings.url) candidate.token = settings.token;
     await request('/api/health', undefined, candidate);
-    sessionStorage.setItem('nimitz-connection', JSON.stringify(candidate));
+    localStorage.setItem('nimitz-connection', JSON.stringify(candidate));
     $('jira-token').value = '';
     location.href = location.pathname;
   } catch (error) { $('connection-error').textContent = error.message; }
