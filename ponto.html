@@ -66,7 +66,7 @@ button{cursor:pointer}
 .play:disabled{opacity:.5;cursor:default}
 
 .recent{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.recent .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+.recent .lbl{font-size:12px;color:var(--muted);margin-right:4px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:12.5px;display:inline-flex;gap:6px;align-items:center;max-width:100%}
 .chip b{font-family:var(--f-mono);font-weight:600}
 .chip span{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
@@ -123,7 +123,7 @@ button.pill{cursor:pointer}
 
 aside{display:flex;flex-direction:column;gap:14px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 96px)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
-.card h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.card h3{margin:0 0 8px;font-size:12px;color:var(--muted);font-weight:600}
 .sum{display:flex;flex-direction:column;gap:8px}
 .sum .it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;font-size:13px}
 .sum .it .k{font-family:var(--f-mono);font-weight:600}
@@ -190,7 +190,7 @@ a.pill{text-decoration:none;display:inline-block}
 .filters .end{margin-left:auto;display:flex;gap:8px;align-items:center}
 .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.kpi .l{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.kpi .l{font-size:11.5px;color:var(--muted)}
 .kpi .v{font-family:var(--f-mono);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
 .kpi .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .focus{background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
@@ -200,7 +200,7 @@ a.pill{text-decoration:none;display:inline-block}
 .focus .m b{font-family:var(--f-mono);font-size:20px}
 .focus .m span{font-size:11.5px;color:var(--muted)}
 .chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px}
-.chart h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.chart h3{margin:0 0 8px;font-size:12px;color:var(--muted);font-weight:600}
 .chart .scroll{overflow-x:auto}
 .chart svg{display:block}
 .chart svg text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
@@ -209,7 +209,7 @@ a.pill{text-decoration:none;display:inline-block}
 .chart svg rect.bar:hover{opacity:.8}
 .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
 table.rep{width:100%;border-collapse:collapse;font-size:13.5px;min-width:760px}
-table.rep th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:9px 12px;background:var(--surface-2);white-space:nowrap}
+table.rep th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:9px 12px;background:var(--surface-2);white-space:nowrap}
 table.rep th button{border:0;background:transparent;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit}
 table.rep th button[data-active]{color:var(--ink)}
 table.rep td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:middle}
@@ -227,7 +227,7 @@ table.rep tfoot td{font-weight:600;border-top:2px solid var(--line)}
 .detlist .dr{display:grid;grid-template-columns:130px 170px minmax(0,1fr) 90px;gap:16px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)}
 .detlist.team .dr{grid-template-columns:130px 170px minmax(0,1fr) minmax(0,200px) 90px}
 .detlist .dr:last-child{border-bottom:0}
-.detlist .dh{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding-top:2px;padding-bottom:5px}
+.detlist .dh{font-size:11px;color:var(--muted);font-weight:600;padding-top:2px;padding-bottom:5px}
 .detlist .d-day{color:var(--muted)}
 .detlist .d-day b{color:var(--ink);font-weight:500;font-family:var(--f-mono);margin-left:6px}
 .detlist .d-time{font-family:var(--f-mono);display:flex;align-items:center;gap:10px}
@@ -287,7 +287,7 @@ select::-ms-expand{display:none}
 @keyframes fsIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .fs-pop.up{animation-name:fsUp}
 @keyframes fsUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-.fs-grp{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;padding:8px 10px 4px}
+.fs-grp{font-size:11px;color:var(--muted);font-weight:600;padding:8px 10px 4px}
 .fs-sep{height:1px;background:var(--line);margin:4px 6px}
 .fs-it{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fs-it span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -462,10 +462,10 @@ input[list]::-webkit-calendar-picker-indicator{display:none!important;opacity:0}
   --chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%23a3b4c2' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 body{font-size:13px}
-.wrap{max-width:none;padding:16px 16px 32px;gap:16px}
+.wrap{max-width:none;padding:20px 20px 32px;gap:16px}
 /* cabeçalho no formato dos títulos de seção do painel ("HOMOLOGAÇÃO GERAL") */
 header.top{align-items:center}
-.top h1{font-family:var(--f-body);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink)}
+.top h1{font-family:var(--f-body);font-size:10px;font-weight:700;color:var(--ink)}
 .top .sub,.top .who{font-size:11px}
 .top .who strong{color:var(--ink)}
 /* botões e controles com a altura, o raio e o peso do painel */
@@ -491,6 +491,6 @@ header.top{align-items:center}
 table.rep th{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--faint)}table.rep td{font-size:13px}
 @media(max-width:650px){.wrap{padding:12px 12px 28px}}
 .ponto-aviso{padding:24px 16px;color:var(--muted);font-size:13px}.ponto-aviso p{margin:8px 0 0}.ponto-aviso b{color:var(--ink)}
-.rotulo-ponto{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink)}.ponto-erro{color:var(--err);margin:0}
+.rotulo-ponto{font-size:10px;font-weight:700;color:var(--ink)}.ponto-erro{color:var(--err);margin:0}
 </style><script type="module" src="./ponto-boot.js?v=20261105g"></script>
 </body></html>

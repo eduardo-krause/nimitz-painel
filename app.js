@@ -115,16 +115,16 @@ var COLUNAS = [
   {id:"status",      rot:"Status",            w:152, tipo:"status"},
   {id:"prazo",       rot:"Prazo",             w:96,  tipo:"texto"},
   {id:"priority",    rot:"Prioridade",        w:104, tipo:"enum"},
-  {id:"testAnalyst", rot:"Analista de Testes",w:160, tipo:"enum"},
+  {id:"testAnalyst", rot:"Analista de testes",w:160, tipo:"enum"},
   {id:"dev",         rot:"Desenvolvedor",     w:160, tipo:"enum"},
   {id:"cliente",     rot:"Cliente",           w:168, tipo:"multi"},
   {id:"ticket",      rot:"Ticket Movidesk",   w:120, tipo:"texto"},
-  {id:"estimativa",  rot:"Est. Testes",       w:96,  tipo:"texto"},
+  {id:"estimativa",  rot:"Est. testes",       w:96,  tipo:"texto"},
   /* Horas lançadas no Jira pela pessoa de cada campo: Analista de Requisitos,
      Analista de Testes e Desenvolvedor. Vêm de /api/worklog-hours, não da busca. */
-  {id:"horasAnalista", rot:"Horas Analista",  w:112, tipo:"texto"},
-  {id:"horasTeste",  rot:"Horas Testes",      w:104, tipo:"texto"},
-  {id:"horasDev",    rot:"Horas Dev",         w:96,  tipo:"texto"},
+  {id:"horasAnalista", rot:"Horas analista",  w:112, tipo:"texto"},
+  {id:"horasTeste",  rot:"Horas testes",      w:104, tipo:"texto"},
+  {id:"horasDev",    rot:"Horas dev",         w:96,  tipo:"texto"},
   /* Estas cinco já chegavam no mapear() e eram descartadas na exibição.
      Vêm escondidas por padrão para não estourar a largura da tabela. */
   {id:"versoes",     rot:"Versão",            w:128, tipo:"texto"},
@@ -137,50 +137,50 @@ var COLUNAS = [
   {id:"assignee", rot:"Responsável", w:152, tipo:"enum"},
   {id:"reporter", rot:"Relator", w:152, tipo:"enum"},
   {id:"creator", rot:"Criador", w:152, tipo:"enum"},
-  {id:"analistaReq", rot:"Analista de Requisitos", w:160, tipo:"enum"},
-  {id:"analiseTecnica", rot:"Análise Técnica", w:152, tipo:"enum"},
-  {id:"ux", rot:"UX Designer", w:152, tipo:"enum"},
-  {id:"devOrigem", rot:"Desenvolvedor Origem", w:160, tipo:"enum"},
-  {id:"reqOrigem", rot:"Analista Req. Origem", w:160, tipo:"enum"},
-  {id:"testeOrigem", rot:"Analista Testes Origem", w:168, tipo:"enum"},
+  {id:"analistaReq", rot:"Analista de requisitos", w:160, tipo:"enum"},
+  {id:"analiseTecnica", rot:"Análise técnica", w:152, tipo:"enum"},
+  {id:"ux", rot:"UX designer", w:152, tipo:"enum"},
+  {id:"devOrigem", rot:"Desenvolvedor origem", w:160, tipo:"enum"},
+  {id:"reqOrigem", rot:"Analista req. origem", w:160, tipo:"enum"},
+  {id:"testeOrigem", rot:"Analista testes origem", w:168, tipo:"enum"},
   {id:"squad", rot:"Squad", w:120, tipo:"enum"},
   {id:"modulo", rot:"Módulo", w:136, tipo:"enum"},
   {id:"rotina", rot:"Rotina", w:136, tipo:"enum"},
   {id:"impacto", rot:"Impacto", w:120, tipo:"enum"},
   {id:"clienteNimitz", rot:"Cliente Nimitz", w:160, tipo:"enum"},
-  {id:"origemBug", rot:"Origem do BUG", w:136, tipo:"enum"},
-  {id:"classifBug", rot:"Classificação de BUG", w:152, tipo:"enum"},
-  {id:"criticidadeBug", rot:"Criticidade de BUG", w:144, tipo:"enum"},
-  {id:"bugGerado", rot:"Bug Gerado", w:120, tipo:"enum"},
-  {id:"classifMelhoria", rot:"Classif. Melhoria", w:160, tipo:"enum"},
+  {id:"origemBug", rot:"Origem do bug", w:136, tipo:"enum"},
+  {id:"classifBug", rot:"Classificação de bug", w:152, tipo:"enum"},
+  {id:"criticidadeBug", rot:"Criticidade de bug", w:144, tipo:"enum"},
+  {id:"bugGerado", rot:"Bug gerado", w:120, tipo:"enum"},
+  {id:"classifMelhoria", rot:"Classif. melhoria", w:160, tipo:"enum"},
   {id:"gerarDpu", rot:"Gerar DPU", w:104, tipo:"enum"},
-  {id:"iaRequisitos", rot:"Uso de IA – Requisitos", w:160, tipo:"enum"},
-  {id:"iaTestes", rot:"Uso de IA – Testes", w:152, tipo:"enum"},
-  {id:"iaDesenv", rot:"Uso de IA – Desenv.", w:152, tipo:"enum"},
-  {id:"motivoReprovT", rot:"Motivo Reprov. Testes", w:176, tipo:"enum"},
-  {id:"motivoReprovA", rot:"Motivo Reprov. Análise", w:176, tipo:"enum"},
+  {id:"iaRequisitos", rot:"Uso de IA – requisitos", w:160, tipo:"enum"},
+  {id:"iaTestes", rot:"Uso de IA – testes", w:152, tipo:"enum"},
+  {id:"iaDesenv", rot:"Uso de IA – desenv.", w:152, tipo:"enum"},
+  {id:"motivoReprovT", rot:"Motivo reprov. testes", w:176, tipo:"enum"},
+  {id:"motivoReprovA", rot:"Motivo reprov. análise", w:176, tipo:"enum"},
   {id:"resolucao", rot:"Resolução", w:128, tipo:"enum"},
   {id:"catStatus", rot:"Categoria do status", w:144, tipo:"enum"},
-  {id:"versaoEntrega", rot:"Versão Entrega", w:136, tipo:"texto"},
+  {id:"versaoEntrega", rot:"Versão entrega", w:136, tipo:"texto"},
   {id:"versoesAfet", rot:"Versões afetadas", w:144, tipo:"texto"},
   {id:"componentes", rot:"Componentes", w:144, tipo:"texto"},
   {id:"etiquetas", rot:"Etiquetas", w:144, tipo:"texto"},
-  {id:"pai", rot:"Pai / Épico", w:112, tipo:"texto"},
-  {id:"tarefaOrigem", rot:"Tarefa Origem", w:120, tipo:"texto"},
+  {id:"pai", rot:"Pai / épico", w:112, tipo:"texto"},
+  {id:"tarefaOrigem", rot:"Tarefa origem", w:120, tipo:"texto"},
   {id:"branch", rot:"Branch", w:160, tipo:"texto"},
-  {id:"motivoReprov", rot:"Motivo Reprovação", w:176, tipo:"texto"},
+  {id:"motivoReprov", rot:"Motivo reprovação", w:176, tipo:"texto"},
   {id:"criado", rot:"Criado", w:128, tipo:"texto"},
-  {id:"primeiraResp", rot:"1ª Resposta", w:128, tipo:"texto"},
-  {id:"estDesenv", rot:"Est. Desenvolvimento", w:144, tipo:"texto"},
-  {id:"estRequisitos", rot:"Est. Requisitos", w:128, tipo:"texto"},
+  {id:"primeiraResp", rot:"1ª resposta", w:128, tipo:"texto"},
+  {id:"estDesenv", rot:"Est. desenvolvimento", w:144, tipo:"texto"},
+  {id:"estRequisitos", rot:"Est. requisitos", w:128, tipo:"texto"},
   {id:"estUX", rot:"Est. UX", w:104, tipo:"texto"},
-  {id:"estAnaliseTec", rot:"Est. Análise Técnica", w:144, tipo:"texto"},
-  {id:"qtdReprov", rot:"Qtd. Reprovações", w:136, tipo:"texto"},
-  {id:"qtdMotivos", rot:"Qtd. Motivos Reprov.", w:152, tipo:"texto"},
-  {id:"qtdReprovAnt", rot:"Qtd. Reprov. Antigas", w:152, tipo:"texto"},
-  {id:"gut", rot:"GUT Resultado", w:120, tipo:"texto"},
+  {id:"estAnaliseTec", rot:"Est. análise técnica", w:144, tipo:"texto"},
+  {id:"qtdReprov", rot:"Qtd. reprovações", w:136, tipo:"texto"},
+  {id:"qtdMotivos", rot:"Qtd. motivos reprov.", w:152, tipo:"texto"},
+  {id:"qtdReprovAnt", rot:"Qtd. reprov. antigas", w:152, tipo:"texto"},
+  {id:"gut", rot:"GUT resultado", w:120, tipo:"texto"},
   {id:"tempoGasto", rot:"Tempo gasto (h)", w:120, tipo:"texto"},
-  {id:"razaoTrab", rot:"Razão Trabalhada", w:136, tipo:"texto"}
+  {id:"razaoTrab", rot:"Razão trabalhada", w:136, tipo:"texto"}
 ];
 
 /* ===================== ícones ===================== */
@@ -2526,8 +2526,18 @@ function renderRodape(){
   var j = janelaRelease();
   var prazos = '<i><b style="background:var(--danger)"></b>vence antes da versão de '+fmtDiaMes(j.r1)+'</i>'
     + '<i><b style="background:var(--warn-text)"></b>só cabe nesta versão</i>';
-  el["rodape"].innerHTML = '<div class="legenda"><span class="rotulo">Fases</span>'+itens+'</div>'
-    + '<div class="legenda"><span class="rotulo">Prazo</span>'+prazos+'</div>';
+  /* Fechada por padrão: um botão pequeno abre e fecha, e a escolha fica
+     guardada neste navegador para a pessoa. */
+  var aberta = false;
+  try{ aberta = localStorage.getItem(window.nimitz.storagePrefix+"legendas") === "1"; }catch(e){}
+  el["rodape"].innerHTML = '<button type="button" class="bt-legendas'+(aberta?" on":"")+'" id="bt-legendas" aria-expanded="'+aberta+'">'
+    + icon(aberta ? "eyeoff" : "eye",12)+' Legendas</button>'
+    + (aberta ? '<div class="legenda"><span class="rotulo">Fases</span>'+itens+'</div>'
+              + '<div class="legenda"><span class="rotulo">Prazo</span>'+prazos+'</div>' : "");
+  document.getElementById("bt-legendas").onclick = function(){
+    try{ localStorage.setItem(window.nimitz.storagePrefix+"legendas", aberta ? "0" : "1"); }catch(e){}
+    renderRodape();
+  };
 }
 
 /* ===================== checklist =====================
@@ -3030,12 +3040,12 @@ function renderClList(){
       + '<span class="grip">'+icon("grip",14)+'</span>'
       + '<span class="ponto-key-cell"><a class="cl-key mono" style="'+risco+'" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
       + '<span class="cl-summary"><span class="txt" style="'+risco+'">'+esc(t.summary)+'</span>'
-      +   (voltou?'<span class="chip-mini chip-voltou">voltou</span>':"")
+      +   (voltou?'<span class="chip-mini chip-voltou">Voltou</span>':"")
       +   (t.impedida
-            ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">impedida no jira</span>'
+            ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">Impedida no Jira</span>'
             : estado!=="dispensada" ? ""
-              : (disp ? '<span class="chip-mini chip-disp" title="Sua marcação — só você vê">indisponível para teste '+fmtData(disp.em)+'</span>'
-                      : (autoDisp ? '<span class="chip-mini chip-disp">indisponível para teste</span>' : "")))
+              : (disp ? '<span class="chip-mini chip-disp" title="Sua marcação — só você vê">Indisponível para teste '+fmtData(disp.em)+'</span>'
+                      : (autoDisp ? '<span class="chip-mini chip-disp">Indisponível para teste</span>' : "")))
       + '</span>'
       + '<span class="cl-type cel-faint">'+esc(t.type)+'</span>'
       + '<span class="cl-status">'+etiquetaStatus(t.status)+'</span>'
@@ -3348,7 +3358,7 @@ var HG_COLUNAS = [
   {cls:"cl-status",   rot:"Status",     ord:"status"},
   {cls:"hg-c-testes", rot:"Testes",     ord:"testAnalyst"},
   {cls:"hg-c-est",    rot:"Est.",       ord:"estimativa"},
-  {cls:"hg-c-versao", rot:"Versões Corrigidas", ord:"versao"},
+  {cls:"hg-c-versao", rot:"Versões corrigidas", ord:"versao"},
   {cls:"hg-c-fase",   rot:"Versão atual",   tit:"O que se homologa nesta rodada"},
   {cls:"hg-c-fase",   rot:"Próxima versão", tit:"Fica para a rodada seguinte"},
   {cls:"cl-updated",  rot:"Entrega",    ord:"prazo"},
@@ -3616,7 +3626,7 @@ function linhaHomolog(t){
                  : "Marcar como testada em homologação geral")+'">'+icon("check",12)+'</button></span>'
     + '<span class="ponto-key-cell"><a class="cl-key" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
     + '<span class="cl-summary"><span class="txt">'+esc(t.summary)+'</span>'
-    +   (t.impedida ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">impedida no jira</span>' : "")
+    +   (t.impedida ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">Impedida no Jira</span>' : "")
     +   (extra ? '<span class="chip-mini chip-extra" title="Posta na fila aqui'+(quandoExtra?" em "+quandoExtra:"")
     +     ' — o status do Jira ('+esc(t.status||"sem status")+') não a traria">na fila pelo time</span>' : "")
     +   (fora ? '<span class="chip-mini chip-fora" title="Tirada da fila aqui'+(quandoFora?" em "+quandoFora:"")
@@ -4490,7 +4500,7 @@ var GRADE_NATIVAS = {
   homolog: [
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
     {id:"testAnalyst", rot:"Testes", sel:".hg-testes,.hg-c-testes"}, {id:"estimativa", rot:"Est.", sel:".hg-est,.hg-c-est"},
-    {id:"versao", rot:"Versões Corrigidas", sel:".hg-versao,.hg-c-versao"}, {id:"prazo", rot:"Entrega", sel:".cl-updated"},
+    {id:"versao", rot:"Versões corrigidas", sel:".hg-versao,.hg-c-versao"}, {id:"prazo", rot:"Entrega", sel:".cl-updated"},
     {id:"obs", rot:"Observação", sel:".hg-obs,.hg-c-obs"}
   ]
 };

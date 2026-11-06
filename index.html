@@ -93,13 +93,13 @@
 
   --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,"Cascadia Code",Consolas,"Liberation Mono",monospace;
-  --fs-label:10px; --fs-xs:11px; --fs-sm:12px; --fs-md:13px; --fs-lg:15px; --fs-xl:22px;
-  --track-label:.08em;
+  --fs-label:11px; --fs-xs:11px; --fs-sm:12px; --fs-md:13px; --fs-lg:15px; --fs-xl:22px;
+  --track-label:normal;
 
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px;
   --r-sm:6px; --r-md:8px; --r-lg:12px; --r-full:999px;
   --ctrl-h:30px; --ctrl-h-sm:26px; --head-h:32px;
-  --gutter:var(--sp-4);
+  --gutter:var(--sp-5);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -197,7 +197,7 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
 /* Com movimento reduzido a barra some na hora — e sumirAviso() também pula a
    espera, senão a mensagem ficaria 280ms parada e opaca antes de desaparecer. */
 
-.rotulo{font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);color:var(--text-faint);}
+.rotulo{font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);color:var(--text-faint);}
 
 /* topo */
 .topbar{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--gutter);
@@ -226,7 +226,7 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
    em nada. Sem ícone de propósito — o cabeçalho já tem ícone em tudo, e aqui é
    a palavra que precisa ser lida. */
 .seg{display:inline-flex;align-items:center;gap:var(--sp-2);}
-.seg-lab{font-size:var(--fs-label);font-weight:700;text-transform:uppercase;
+.seg-lab{font-size:var(--fs-label);font-weight:700;
   letter-spacing:var(--track-label);color:var(--text-faint);}
 .seg-cx{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-md);
   background:var(--surface);box-shadow:var(--shadow);overflow:hidden;}
@@ -288,7 +288,7 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
 .tile .corpo{display:flex;flex-direction:column;gap:1px;min-width:0;}
 .tile .n{font-size:var(--fs-md);font-weight:700;line-height:1.1;}
 .tile .n em{font-style:normal;font-size:var(--fs-xs);font-weight:600;color:var(--text-faint);margin-left:3px;}
-.tile .lab{font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);
+.tile .lab{font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);
   color:var(--text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 /* Respiro entre o ícone da fase e o rótulo. Fica em margem, e não em flex+gap,
    porque .lab depende de text-overflow:ellipsis para truncar — e ellipsis não
@@ -307,6 +307,8 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
 .busca input::placeholder{color:var(--text-faint);}
 .sel-inline{border:1px solid var(--border);background:var(--surface);border-radius:var(--r-md);
   padding:0 var(--sp-2);height:var(--ctrl-h);font-size:var(--fs-sm);color:var(--text-muted);cursor:pointer;max-width:190px;}
+/* Menu cujo botão está escondido não ocupa lugar (nem o espaço do gap). */
+.dd:has(> .btn.hidden:first-child){display:none;}
 .toolbar-dir{margin-left:auto;display:flex;align-items:center;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--text-faint);}
 /* Sem isto o select encolhe e corta o rotulo da ordenacao. */
 .toolbar-dir .sel-inline{flex:none;}
@@ -340,6 +342,11 @@ thead th{position:sticky;top:0;padding:0;background:var(--surface-2);z-index:20;
 thead tr:nth-child(2) th{top:var(--head-h);background:var(--surface);
   border-bottom:1px solid var(--border);z-index:19;}
 .th-filter{padding:var(--sp-2) var(--sp-2);}
+/* Primeira e última coluna da tabela alinham com a margem das barras. */
+thead th:first-child .th-btn,tbody td:first-child{padding-left:var(--gutter);}
+thead th:last-child .th-btn,tbody td:last-child{padding-right:var(--gutter);}
+thead tr:nth-child(2) th.th-filter:first-child{padding-left:var(--gutter);}
+thead tr:nth-child(2) th.th-filter:last-child{padding-right:var(--gutter);}
 .th-filter select,.th-filter input,.th-filter button{width:100%;border:0;border-radius:var(--r-sm);
   padding:0 var(--sp-2);height:var(--ctrl-h-sm);font-size:var(--fs-xs);background:var(--surface-3);
   color:var(--text-muted);outline:0;cursor:pointer;text-align:left;font-family:inherit;}
@@ -355,7 +362,7 @@ thead tr:nth-child(2) th{top:var(--head-h);background:var(--surface);
 .captura{position:fixed;inset:0;z-index:30;}
 .th-btn{display:flex;align-items:center;gap:var(--sp-1);width:100%;height:var(--head-h);border:0;
   background:transparent;padding:0 var(--sp-3);cursor:pointer;text-align:left;
-  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);
+  font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);
   color:var(--text-faint);overflow:hidden;}
 /* O rótulo vai em span próprio porque ellipsis não se aplica a nó de texto solto
    dentro de um flex; a seta de ordenação fica de fora do truncamento. */
@@ -421,6 +428,10 @@ tr:hover .chave svg{opacity:.6;}
 
 .rodape{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--gutter);
   border-top:1px solid var(--border);background:var(--surface-2);font-size:var(--fs-xs);color:var(--text-muted);flex:none;}
+.bt-legendas{display:inline-flex;align-items:center;gap:var(--sp-1);height:var(--ctrl-h-sm);padding:0 var(--sp-2);
+  border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text-muted);
+  font-size:var(--fs-xs);font-family:inherit;cursor:pointer;}
+.bt-legendas:hover,.bt-legendas.on{background:var(--surface-3);color:var(--text);}
 .legenda{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center;}
 .legenda i{display:inline-flex;align-items:center;gap:var(--sp-1);font-style:normal;}
 .legenda i b{width:8px;height:8px;border-radius:var(--r-full);display:block;}
@@ -476,10 +487,10 @@ tr:hover .chave svg{opacity:.6;}
 
 /* cabeçalho, linhas e separadores compartilham recuo, gap e larguras */
 .cl-cols,.cl-row,.section-sep{display:flex;align-items:center;gap:var(--row-gap);
-  padding-left:var(--sp-6);padding-right:var(--sp-6);min-width:1220px;}
+  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1220px;}
 .cl-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
-  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+  font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .cl-list{flex:1;min-height:0;overflow:auto;}
 #cl-rows{padding-bottom:var(--sp-4);min-width:1220px;}
 .cl-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
@@ -525,7 +536,7 @@ tr:hover .chave svg{opacity:.6;}
 .cl-row .cl-updated.prazo-semana{color:var(--warn-text);font-weight:700;}
 .cl-row .cl-updated.prazo-semana svg{color:var(--warn-text);}
 .chip-mini{flex:none;border-radius:var(--r-full);padding:1px var(--sp-2);font-size:var(--fs-label);font-weight:700;
-  text-transform:uppercase;letter-spacing:.04em;}
+  }
 .chip-voltou{background:var(--warn-bg);color:var(--warn-text);}
 .chip-disp{background:var(--surface);border:1px solid var(--danger-border);color:var(--danger);}
 .chip-impedida{background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text);}
@@ -533,7 +544,7 @@ tr:hover .chave svg{opacity:.6;}
   border:0;background:transparent;color:var(--text-faint);cursor:pointer;}
 .cl-dismiss:hover{background:var(--surface-3);color:var(--danger);}
 .section-sep{padding-top:var(--sp-2);padding-bottom:var(--sp-2);background:var(--surface-2);color:var(--text-faint);
-  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+  font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .section-sep .line{flex:1;height:1px;background:var(--border);}
 
 /* ===== aba Homologação geral =====
@@ -541,10 +552,10 @@ tr:hover .chave svg{opacity:.6;}
    na frente e a observação livre no fim — as colunas G e N da aba "Testes
    (homolog master)" da planilha de versões, que é o que esta aba substitui. */
 .hg-cols,.hg-row,.hg-sep{display:flex;align-items:center;gap:var(--row-gap);
-  padding-left:var(--sp-6);padding-right:var(--sp-6);min-width:1560px;}
+  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1560px;}
 .hg-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
-  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+  font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .hg-list{flex:1;min-height:0;overflow:auto;}
 #hg-rows{padding-bottom:var(--sp-4);min-width:1560px;}
 .hg-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
@@ -559,7 +570,7 @@ tr:hover .chave svg{opacity:.6;}
    ".testada" é o sinal que se procura descendo a fila, e disputar esse canal
    com o corte da rodada tiraria justamente o que a marca do teste diz. */
 .hg-sep{padding-top:var(--sp-2);padding-bottom:var(--sp-2);background:var(--surface-2);color:var(--text-faint);
-  font-size:var(--fs-label);font-weight:700;text-transform:uppercase;letter-spacing:var(--track-label);}
+  font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .hg-sep .line{flex:1;height:1px;background:var(--border);}
 /* Ordenadores do cabeçalho. O cabeçalho daqui é uma LINHA FLEX, não uma tabela,
    então o botão não pode ser o .th-btn da aba Tarefas: aquele tem altura própria
