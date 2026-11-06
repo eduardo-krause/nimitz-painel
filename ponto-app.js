@@ -221,7 +221,7 @@
       render();
       if(e && e.code==="tool_error" && jiraDetail(e).perm){
         if(settings.autoSend){ settings.autoSend=false; $("autoSend").checked=false; mySettings().set(Object.assign({},settings,{autoSend:false})).catch(()=>{}); }
-        showBanner("Envio automático ao Jira desligado: o usuário do Jira desta conta não tem permissão para registrar trabalho. Os lançamentos continuam salvos aqui; peça a permissão ou use “Lançar no Jira”.");
+        showBanner("Envio automático ao Jira desligado: o usuário do Jira desta conta não tem permissão para registrar trabalho. Os lançamentos continuam salvos aqui; peça a permissão ou use “Lançar no Jira”.",undefined,12000);
         return "perm";
       }
     }
@@ -784,7 +784,14 @@
     paintJiraMode();
   }
 
-  function showBanner(text, kind){ const b=$("banner"); b.className="banner"+(kind==="err"?" err":""); b.textContent=text; b.hidden=!text; }
+  /* Aviso passageiro (ms) some sozinho; sem ms fica, porque descreve um estado
+     que continua valendo (sem conexão, sem usuário, falha ao carregar). */
+  let bannerTimer=null;
+  function showBanner(text, kind, ms){
+    const b=$("banner"); clearTimeout(bannerTimer);
+    b.className="banner"+(kind==="err"?" err":""); b.textContent=text; b.hidden=!text;
+    if(text && ms) bannerTimer=setTimeout(()=>{ if(b.textContent===text) b.hidden=true; }, ms);
+  }
 
   /* ---------- Boot ---------- */
 
@@ -1128,11 +1135,11 @@
     .observe(document.body, {childList:true, subtree:true});
 
   window.pontoSelectTask=function(key){
-    if(timer&&timer.running){ showBanner("Há um cronômetro ativo. Pare-o antes de escolher outra tarefa.","warn"); return; }
+    if(timer&&timer.running){ showBanner("Há um cronômetro ativo. Pare-o antes de escolher outra tarefa.","warn",5000); return; }
     $("tabTimer").click(); $("issueIn").value=key; onIssueInput(); $("issueIn").focus();
   };
   window.addEventListener("unhandledrejection",event=>{
-    event.preventDefault();showBanner(event.reason?.message||"Não foi possível salvar. Tente novamente.","err");
+    event.preventDefault();showBanner(event.reason?.message||"Não foi possível salvar. Tente novamente.","err",8000);
   });
   paintCats(); paintTasks(); render(); paintTimer();
   (async ()=>{
