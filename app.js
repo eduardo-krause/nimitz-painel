@@ -99,12 +99,12 @@ var COLUNAS = [
   {id:"dev",         rot:"Desenvolvedor",     w:160, tipo:"enum"},
   {id:"cliente",     rot:"Cliente",           w:168, tipo:"multi"},
   {id:"ticket",      rot:"Ticket Movidesk",   w:120, tipo:"texto"},
-  {id:"estimativa",  rot:"Est. testes",       w:96,  tipo:"texto"},
+  {id:"estimativa",  rot:"Estimativa de testes", w:152,  tipo:"texto"},
   /* Horas lançadas no Jira pela pessoa de cada campo: Analista de Requisitos,
      Analista de Testes e Desenvolvedor. Vêm de /api/worklog-hours, não da busca. */
-  {id:"horasAnalista", rot:"Horas analista",  w:112, tipo:"texto"},
-  {id:"horasTeste",  rot:"Horas testes",      w:104, tipo:"texto"},
-  {id:"horasDev",    rot:"Horas dev",         w:96,  tipo:"texto"},
+  {id:"horasAnalista", rot:"Horas analista de requisitos", w:200, tipo:"texto"},
+  {id:"horasTeste",  rot:"Horas analista de testes", w:184, tipo:"texto"},
+  {id:"horasDev",    rot:"Horas desenvolvedor", w:152,  tipo:"texto"},
   /* Estas cinco já chegavam no mapear() e eram descartadas na exibição.
      Vêm escondidas por padrão para não estourar a largura da tabela. */
   {id:"versoes",     rot:"Versão",            w:128, tipo:"texto"},
@@ -121,8 +121,8 @@ var COLUNAS = [
   {id:"analiseTecnica", rot:"Análise técnica", w:152, tipo:"enum"},
   {id:"ux", rot:"UX designer", w:152, tipo:"enum"},
   {id:"devOrigem", rot:"Desenvolvedor origem", w:160, tipo:"enum"},
-  {id:"reqOrigem", rot:"Analista req. origem", w:160, tipo:"enum"},
-  {id:"testeOrigem", rot:"Analista testes origem", w:168, tipo:"enum"},
+  {id:"reqOrigem", rot:"Analista de requisitos origem", w:208, tipo:"enum"},
+  {id:"testeOrigem", rot:"Analista de testes origem", w:184, tipo:"enum"},
   {id:"squad", rot:"Squad", w:120, tipo:"enum"},
   {id:"modulo", rot:"Módulo", w:136, tipo:"enum"},
   {id:"rotina", rot:"Rotina", w:136, tipo:"enum"},
@@ -132,13 +132,13 @@ var COLUNAS = [
   {id:"classifBug", rot:"Classificação de bug", w:152, tipo:"enum"},
   {id:"criticidadeBug", rot:"Criticidade de bug", w:144, tipo:"enum"},
   {id:"bugGerado", rot:"Bug gerado", w:120, tipo:"enum"},
-  {id:"classifMelhoria", rot:"Classif. melhoria", w:160, tipo:"enum"},
+  {id:"classifMelhoria", rot:"Classificação de melhoria", w:184, tipo:"enum"},
   {id:"gerarDpu", rot:"Gerar DPU", w:104, tipo:"enum"},
   {id:"iaRequisitos", rot:"Uso de IA – requisitos", w:160, tipo:"enum"},
   {id:"iaTestes", rot:"Uso de IA – testes", w:152, tipo:"enum"},
-  {id:"iaDesenv", rot:"Uso de IA – desenv.", w:152, tipo:"enum"},
-  {id:"motivoReprovT", rot:"Motivo reprov. testes", w:176, tipo:"enum"},
-  {id:"motivoReprovA", rot:"Motivo reprov. análise", w:176, tipo:"enum"},
+  {id:"iaDesenv", rot:"Uso de IA – desenvolvimento", w:200, tipo:"enum"},
+  {id:"motivoReprovT", rot:"Motivo reprovação testes", w:184, tipo:"enum"},
+  {id:"motivoReprovA", rot:"Motivo reprovação análise", w:192, tipo:"enum"},
   {id:"resolucao", rot:"Resolução", w:128, tipo:"enum"},
   {id:"catStatus", rot:"Categoria do status", w:144, tipo:"enum"},
   {id:"versaoEntrega", rot:"Versão entrega", w:136, tipo:"texto"},
@@ -150,14 +150,14 @@ var COLUNAS = [
   {id:"branch", rot:"Branch", w:160, tipo:"texto"},
   {id:"motivoReprov", rot:"Motivo reprovação", w:176, tipo:"texto"},
   {id:"criado", rot:"Criado", w:128, tipo:"texto"},
-  {id:"primeiraResp", rot:"1ª resposta", w:128, tipo:"texto"},
-  {id:"estDesenv", rot:"Est. desenvolvimento", w:144, tipo:"texto"},
-  {id:"estRequisitos", rot:"Est. requisitos", w:128, tipo:"texto"},
-  {id:"estUX", rot:"Est. UX", w:104, tipo:"texto"},
-  {id:"estAnaliseTec", rot:"Est. análise técnica", w:144, tipo:"texto"},
-  {id:"qtdReprov", rot:"Qtd. reprovações", w:136, tipo:"texto"},
-  {id:"qtdMotivos", rot:"Qtd. motivos reprov.", w:152, tipo:"texto"},
-  {id:"qtdReprovAnt", rot:"Qtd. reprov. antigas", w:152, tipo:"texto"},
+  {id:"primeiraResp", rot:"Primeira resposta", w:144, tipo:"texto"},
+  {id:"estDesenv", rot:"Estimativa de desenvolvimento", w:208, tipo:"texto"},
+  {id:"estRequisitos", rot:"Estimativa de requisitos", w:176, tipo:"texto"},
+  {id:"estUX", rot:"Estimativa de UX", w:136, tipo:"texto"},
+  {id:"estAnaliseTec", rot:"Estimativa de análise técnica", w:208, tipo:"texto"},
+  {id:"qtdReprov", rot:"Quantidade de reprovações", w:192, tipo:"texto"},
+  {id:"qtdMotivos", rot:"Quantidade de motivos de reprovação", w:248, tipo:"texto"},
+  {id:"qtdReprovAnt", rot:"Quantidade de reprovações antigas", w:232, tipo:"texto"},
   {id:"gut", rot:"GUT resultado", w:120, tipo:"texto"},
   {id:"tempoGasto", rot:"Tempo gasto (h)", w:120, tipo:"texto"},
   {id:"razaoTrab", rot:"Razão trabalhada", w:136, tipo:"texto"}
@@ -2860,8 +2860,8 @@ var HG_COLUNAS = [
   {cls:"cl-summary",  rot:"Resumo",     ord:"summary"},
   {cls:"cl-type",     rot:"Tipo",       ord:"type"},
   {cls:"cl-status",   rot:"Status",     ord:"status"},
-  {cls:"hg-c-testes", rot:"Testes",     ord:"testAnalyst"},
-  {cls:"hg-c-est",    rot:"Est.",       ord:"estimativa"},
+  {cls:"hg-c-testes", rot:"Analista de testes", ord:"testAnalyst"},
+  {cls:"hg-c-est",    rot:"Estimativa de testes", ord:"estimativa"},
   {cls:"hg-c-versao", rot:"Versões corrigidas", ord:"versao"},
   {cls:"hg-c-fase",   rot:"Versão atual",   tit:"O que se homologa nesta rodada"},
   {cls:"hg-c-fase",   rot:"Próxima versão", tit:"Fica para a rodada seguinte"},
@@ -3150,11 +3150,12 @@ function linhaHomolog(t){
     +   ' title="Anotação do time para esta tarefa. Vale quando você sai do campo."></span>'
     + celulasExtras("homolog", t)
     + '<span class="hg-act">'
+    /* Sem o X de tirar da fila: confundia com o X da coluna Versão atual.
+       Fica só o "trazer de volta" nas que já estão em Removidas. */
     +   (fora
         ? '<button type="button" data-voltar="1" class="voltar" title="Trazer de volta para a fila de homologação">'
           + icon("undo",13)+'</button>'
-        : '<button type="button" data-tirar="1" title="Tirar da fila de homologação — vale para todo o time, e dá para trazer de volta em Removidas">'
-          + icon("x",13)+'</button>')
+        : '')
     + '</span>'
     + '</div>';
 }
@@ -3986,7 +3987,7 @@ var GRADE_NATIVAS = {
   ],
   homolog: [
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
-    {id:"testAnalyst", rot:"Testes", sel:".hg-testes,.hg-c-testes"}, {id:"estimativa", rot:"Est.", sel:".hg-est,.hg-c-est"},
+    {id:"testAnalyst", rot:"Analista de testes", sel:".hg-testes,.hg-c-testes"}, {id:"estimativa", rot:"Estimativa de testes", sel:".hg-est,.hg-c-est"},
     {id:"versao", rot:"Versões corrigidas", sel:".hg-versao,.hg-c-versao"}, {id:"prazo", rot:"Entrega", sel:".cl-updated"},
     {id:"obs", rot:"Observação", sel:".hg-obs,.hg-c-obs"}
   ]
