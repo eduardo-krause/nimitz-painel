@@ -4187,6 +4187,16 @@ function aplicarCssColunas(){
       GRADE_LINHA[g].forEach(function(linha){ css += GRADE_PAINEL[g]+" "+linha+" > "+sel+"{order:999}"; });
     });
   });
+  /* A linha tem largura mínima fixa no CSS, pensada sem colunas extras. Cada
+     extra soma a sua largura (e o espaço entre colunas); sem isso o fundo da
+     linha acaba antes das últimas células. */
+  var BASE_GRADE = {checklist:1220, homolog:1720};
+  ["checklist","homolog"].forEach(function(g){
+    var ex = extrasDaGrade(g), soma = 0;
+    ex.forEach(function(c){ soma += c.w; });
+    var pre = g === "homolog" ? "#hg-" : "#cl-";
+    css += GRADE_PAINEL[g]+" "+pre+"rows,"+GRADE_PAINEL[g]+" "+pre+"cols{min-width:calc("+(BASE_GRADE[g]+soma)+"px + "+ex.length+" * var(--row-gap))}";
+  });
   var tag = document.getElementById("grade-colunas-css");
   if(!tag){ tag = document.createElement("style"); tag.id = "grade-colunas-css"; document.head.appendChild(tag); }
   if(tag.textContent !== css) tag.textContent = css;
