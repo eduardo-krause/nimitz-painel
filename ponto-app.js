@@ -410,11 +410,11 @@
     const w = en.worklog||{status:"pending"};
     if(w.status==="manual") return w.dirty ? `<span class="pill check" title="Editado depois de lançar; ajuste o registro direto no Jira">Ajustar no Jira</span>`
       : `<span class="pill sent" title="Lançado manualmente em ${w.sentAt?new Date(w.sentAt).toLocaleString("pt-BR"):""} como ${esc(w.spent||"")}">Lançado</span>`;
-    if(w.status==="sent" && w.dirty) return w.id ? `<button class="pill check" data-send="${en.id}" title="Editado depois do envio. Clique para atualizar o worklog no Jira">Atualizar Jira</button>` : `<span class="pill check" title="Editado depois do envio; ajuste o worklog direto no Jira">Ajustar no Jira</span>`;
+    if(w.status==="sent" && w.dirty) return w.id ? `<button class="pill check" data-send="${esc(en.id)}" title="Editado depois do envio. Clique para atualizar o worklog no Jira">Atualizar Jira</button>` : `<span class="pill check" title="Editado depois do envio; ajuste o worklog direto no Jira">Ajustar no Jira</span>`;
     if(w.status==="sent") return `<span class="pill sent" title="Enviado ${w.sentAt?new Date(w.sentAt).toLocaleString("pt-BR"):""} como ${esc(w.spent||"")}">No Jira</span>`;
-    if(w.status==="check") return `<button class="pill check" data-send="${en.id}" title="${esc(w.error||"")}">Verificar</button>`;
-    if(w.status==="error") return `<button class="pill err" data-send="${en.id}" title="${esc(w.error||"")}">Erro · reenviar</button>`;
-    return `<button class="pill pending" data-send="${en.id}" title="Enviar como worklog">Enviar</button>`;
+    if(w.status==="check") return `<button class="pill check" data-send="${esc(en.id)}" title="${esc(w.error||"")}">Verificar</button>`;
+    if(w.status==="error") return `<button class="pill err" data-send="${esc(en.id)}" title="${esc(w.error||"")}">Erro · reenviar</button>`;
+    return `<button class="pill pending" data-send="${esc(en.id)}" title="Enviar como worklog">Enviar</button>`;
   }
 
   // worklog enviado por esta conta pode ser excluído junto no Jira
@@ -480,10 +480,10 @@
           <div class="dur mono">${hm((en.end||Date.now())-en.start)}</div>
           <div class="acts">${statusPill(en)}
             ${confirmDel===en.id
-              ? `<button class="btn small danger" data-del-yes="${en.id}">Excluir</button><button class="btn small" data-del-no>Não</button>`
-              : `<button class="icon" title="Continuar esta tarefa" data-resume="${en.id}">${ICON.play}</button>
-                 <button class="icon" title="Editar" data-edit-btn="${en.id}">${ICON.edit}</button>
-                 <button class="icon" title="Excluir" data-del="${en.id}">${ICON.del}</button>`}
+              ? `<button class="btn small danger" data-del-yes="${esc(en.id)}">Excluir</button><button class="btn small" data-del-no>Não</button>`
+              : `<button class="icon" title="Continuar esta tarefa" data-resume="${esc(en.id)}">${ICON.play}</button>
+                 <button class="icon" title="Editar" data-edit-btn="${esc(en.id)}">${ICON.edit}</button>
+                 <button class="icon" title="Excluir" data-del="${esc(en.id)}">${ICON.del}</button>`}
           </div>
           ${L.msg?`<div class="msg ${L.msgKind==="warn"?"warn":L.msgKind==="info"?"info":""}">${esc(L.msg)}</div>`:(w.status==="error"&&w.error?`<div class="msg">${esc(w.error)}</div>`:"")}
           ${confirmDel===en.id && (w.status==="sent" || w.id) ?`<div class="msg warn">${zeroable(en) ? "Este lançamento será excluído também do Jira. Esta ação não pode ser desfeita pelo painel." : "Já está no Jira. Excluir aqui não remove o registro de lá; ajuste direto no Jira."}</div>`:""}
@@ -778,7 +778,7 @@
     let gotEntries = false, gotJira = false;
     mySubs.push(myEntries().orderBy("start","desc").onSnapshot(snap=>{
       if(k!==myKey()) return;
-      allEntries = snap.docs.map(d=>Object.assign({id:d.id,_pk:k},d.data()));
+      allEntries = snap.docs.map(d=>Object.assign({},d.data(),{id:d.id,_pk:k}));
       entries = allEntries.filter(alive);
       if(!gotEntries){ gotEntries = true; if(gotJira) autoSync(k); }
       entries.forEach(e=>{ if(e.summary && !summaries[e.issue]) summaries[e.issue]=e.summary; if(e.summary && local[e.id] && local[e.id].fix) delete local[e.id]; });
@@ -852,7 +852,7 @@
       let q = entriesCol(k);
       if(a!=null) q = q.where("start",">=",a);
       if(b!=null) q = q.where("start","<",b);
-      q.orderBy("start","desc").get().then(sn=>{ rangeCache[ck] = sn.docs.map(x=>Object.assign({id:x.id,_pk:k},x.data())).filter(alive); renderReport(); }).catch(()=>{});
+      q.orderBy("start","desc").get().then(sn=>{ rangeCache[ck] = sn.docs.map(x=>Object.assign({},x.data(),{id:x.id,_pk:k})).filter(alive); renderReport(); }).catch(()=>{});
     }
     return list;
   }
@@ -1167,7 +1167,7 @@
       members.forEach(m=>{
         if(teamSubs[m]) return;
         teamSubs[m] = entriesCol(m).orderBy("start","desc").onSnapshot(sn=>{
-          team[m] = sn.docs.map(x=>Object.assign({id:x.id,_pk:m},x.data())).filter(alive);
+          team[m] = sn.docs.map(x=>Object.assign({},x.data(),{id:x.id,_pk:m})).filter(alive);
           renderReport();
         }, ()=>{});
       });
