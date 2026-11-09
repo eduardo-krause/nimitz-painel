@@ -3214,6 +3214,10 @@ function renderHomolog(){
   el["ct-hg-fora"].textContent = nFora;
   el["bt-hg-fora"].classList.toggle("hidden", nFora === 0 && !state.hgVerFora);
   el["bt-hg-fora"].classList.toggle("btn-on", state.hgVerFora);
+  /* A coluna de ação só tem botão em Removidas ("trazer de volta"); fora de lá
+     ficaria vazia no fim da linha. */
+  var painelHg = document.querySelector(GRADE_PAINEL.homolog);
+  if(painelHg) painelHg.classList.toggle("hg-sem-acao", !state.hgVerFora);
 
   el["hg-sub"].textContent = state.hgVerFora
     ? d.todas.length + " tarefa(s) tirada(s) da fila pelo time"
@@ -4190,7 +4194,7 @@ function aplicarCssColunas(){
   /* A linha tem largura mínima fixa no CSS, pensada sem colunas extras. Cada
      extra soma a sua largura (e o espaço entre colunas); sem isso o fundo da
      linha acaba antes das últimas células. */
-  var BASE_GRADE = {checklist:1220, homolog:1720};
+  var BASE_GRADE = {checklist:1220, homolog:1660};
   ["checklist","homolog"].forEach(function(g){
     var ex = extrasDaGrade(g), soma = 0;
     ex.forEach(function(c){ soma += c.w; });
