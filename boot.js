@@ -190,7 +190,7 @@ let orderStatusTimer=null;
 function flashOrderStatus(message){
   showOrderStatus(message);
   clearTimeout(orderStatusTimer);
-  orderStatusTimer=setTimeout(()=>showOrderStatus(''),3000);
+  orderStatusTimer=setTimeout(()=>showOrderStatus(''),5000);
 }
 state.canReorder = () => preview || (!!state.orderView && !!orders.get(state.orderView.person())?.ready && !orderSaving);
 state.refreshOrder = async (force=false) => {

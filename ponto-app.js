@@ -784,13 +784,12 @@
     paintJiraMode();
   }
 
-  /* Aviso passageiro (ms) some sozinho; sem ms fica, porque descreve um estado
-     que continua valendo (sem conexão, sem usuário, falha ao carregar). */
+  /* Toda mensagem some sozinha depois de 5 s. */
   let bannerTimer=null;
-  function showBanner(text, kind, ms){
+  function showBanner(text, kind){
     const b=$("banner"); clearTimeout(bannerTimer);
     b.className="banner"+(kind==="err"?" err":""); b.textContent=text; b.hidden=!text;
-    if(text && ms) bannerTimer=setTimeout(()=>{ if(b.textContent===text) b.hidden=true; }, ms);
+    if(text) bannerTimer=setTimeout(()=>{ if(b.textContent===text) b.hidden=true; }, 5000);
   }
 
   /* ---------- Boot ---------- */
@@ -1010,7 +1009,7 @@
       lines.push([r.issue, r.summary||"", Object.keys(r.people||{}).map(k=>personName(k).replace(" (você)","")).join(", "), Object.keys(r.cats).join(", "), r.n, fmtDate(r.first), fmtDate(r.last), Math.floor(m/60)+":"+pad(m%60), hDec(r.total)].join("\t")); });
     try{ await navigator.clipboard.writeText(lines.join("\n")); $("rCopied").textContent="Copiado. Cole no Excel."; }
     catch(_){ $("rCopied").textContent="Não deu para copiar automaticamente."; }
-    setTimeout(()=>{ $("rCopied").textContent=""; }, 3000);
+    setTimeout(()=>{ $("rCopied").textContent=""; }, 5000);
   };
   if(location.hash==="#relatorio") showView("relatorio");
 

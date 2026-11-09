@@ -856,12 +856,12 @@ function avisar(tipo, texto){
   pararTimerAviso();
   state.aviso = {tipo:tipo, texto:texto};
   renderAviso();
-  if(tipo === "ok"){
-    avisoTimer = setTimeout(function(){
-      avisoTimer = null;
-      sumirAviso();
-    }, AVISO_OK_MS);
-  }
+  /* Toda mensagem some sozinha depois de 5 s, seja de sucesso, informação,
+     alerta ou erro. */
+  avisoTimer = setTimeout(function(){
+    avisoTimer = null;
+    sumirAviso();
+  }, AVISO_OK_MS);
 }
 
 /* ===================== Jira ===================== */
