@@ -707,6 +707,12 @@ tr:hover .chave svg{opacity:.6;}
 .pop-cab-acao{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);}
 .btn.btn-sm{height:var(--ctrl-h-sm);padding:0 var(--sp-3);font-size:var(--fs-xs);}
 .pop-item .qtd{margin-left:auto;font-family:var(--font-mono);font-size:var(--fs-label);color:var(--text-faint);}
+.pop-data{width:300px;}
+.pop-data-campos{display:flex;gap:var(--sp-2);padding:var(--sp-3);border-bottom:1px solid var(--border);}
+.pop-data-campos label{flex:1;display:flex;flex-direction:column;gap:var(--sp-1);font-size:var(--fs-xs);color:var(--text-muted);}
+.pop-data-campos input{border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-3);color:var(--text);
+  font:inherit;font-size:var(--fs-sm);padding:var(--sp-1) var(--sp-2);color-scheme:light dark;}
+.pop-data .pop-acoes{flex-wrap:wrap;border-bottom:0;}
 .pop-item .nome{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .chk{flex:none;display:flex;align-items:center;justify-content:center;width:16px;height:16px;
   border-radius:var(--r-sm);border:1.5px solid var(--border-strong);}
@@ -721,6 +727,6 @@ tr:hover .chave svg{opacity:.6;}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261109c"></script>
+<script type="module" src="./boot.js?v=20261111a"></script>
 </body>
 </html>

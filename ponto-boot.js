@@ -1,4 +1,4 @@
-import {createBridge} from './ponto-bridge.js?v=20261109c';
+import {createBridge} from './ponto-bridge.js?v=20261111a';
 const api=window.parent!==window?window.parent.nimitz:null;
 // O Ponto segue o tema do painel (o painel usa o do sistema, ou data-theme se definido).
 function followPanelTheme(){
@@ -23,7 +23,7 @@ if(!api?.connected||api.preview){
   try{
     window.pontoBridge=await createBridge(api);
     window.pontoApi=api;
-    await import('./ponto-app.js?v=20261109c');
+    await import('./ponto-app.js?v=20261111a');
   }catch(error){
     const message=document.createElement('p');message.className='ponto-erro';message.textContent='Não foi possível abrir o Registro: '+error.message;
     showOnly(message);

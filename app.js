@@ -93,7 +93,7 @@ var COLUNAS = [
   {id:"summary",     rot:"Resumo",            w:340, tipo:"texto"},
   {id:"type",        rot:"Tipo",              w:96,  tipo:"enum"},
   {id:"status",      rot:"Status",            w:152, tipo:"status"},
-  {id:"prazo",       rot:"Prazo",             w:96,  tipo:"texto"},
+  {id:"prazo",       rot:"Prazo",             w:96,  tipo:"data"},
   {id:"priority",    rot:"Prioridade",        w:104, tipo:"enum"},
   {id:"testAnalyst", rot:"Analista de testes",w:160, tipo:"enum"},
   {id:"dev",         rot:"Desenvolvedor",     w:160, tipo:"enum"},
@@ -109,8 +109,8 @@ var COLUNAS = [
      Vêm escondidas por padrão para não estourar a largura da tabela. */
   {id:"versoes",     rot:"Versão",            w:128, tipo:"texto"},
   {id:"impedida",    rot:"Impedimento",       w:104, tipo:"enum"},
-  {id:"updated",     rot:"Atualizado",        w:128, tipo:"texto"},
-  {id:"resolvido",   rot:"Resolvido",         w:112, tipo:"texto"},
+  {id:"updated",     rot:"Atualizado",        w:128, tipo:"data"},
+  {id:"resolvido",   rot:"Resolvido",         w:112, tipo:"data"},
   /* O rank é o token de ordenação do board (LexoRank). Não é texto para
      humano, mas é campo do Jira — fica disponível para quem quiser. */
   {id:"rank",        rot:"Classificação",     w:120, tipo:"texto"},
@@ -149,8 +149,8 @@ var COLUNAS = [
   {id:"tarefaOrigem", rot:"Tarefa origem", w:120, tipo:"texto"},
   {id:"branch", rot:"Branch", w:160, tipo:"texto"},
   {id:"motivoReprov", rot:"Motivo reprovação", w:176, tipo:"texto"},
-  {id:"criado", rot:"Criado", w:128, tipo:"texto"},
-  {id:"primeiraResp", rot:"Primeira resposta", w:144, tipo:"texto"},
+  {id:"criado", rot:"Criado", w:128, tipo:"data"},
+  {id:"primeiraResp", rot:"Primeira resposta", w:144, tipo:"data"},
   {id:"estDesenv", rot:"Estimativa de desenvolvimento", w:208, tipo:"texto"},
   {id:"estRequisitos", rot:"Estimativa de requisitos", w:176, tipo:"texto"},
   {id:"estUX", rot:"Estimativa de UX", w:136, tipo:"texto"},
@@ -689,7 +689,29 @@ function valoresMulti(t, id){
 }
 /* Filtro multi é lista; lista vazia é filtro DESLIGADO. Sem isto o [] passaria
    por "ligado" (array vazio é truthy) e o Limpar filtros ficaria aceso à toa. */
-function filtroLigado(v){ return Array.isArray(v) ? v.length>0 : !!v; }
+function filtroLigado(v){
+  if(Array.isArray(v)) return v.length>0;
+  if(v && typeof v === "object") return !!(v.de || v.ate);
+  return !!v;
+}
+/* Filtro de data é período {de, ate} em "AAAA-MM-DD" (o valor do <input
+   type="date">). Compara só o dia: "Atualizado" tem hora e, sem zerar, a
+   tarefa de hoje às 15h ficaria fora de "até hoje". Sem data = fora. */
+function isoDe(d){ return d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate()); }
+function dentroDoPeriodo(valor, f){
+  var d = parseData(valor);
+  if(!d) return false;
+  var dia = isoDe(d);
+  if(f.de && dia < f.de) return false;
+  if(f.ate && dia > f.ate) return false;
+  return true;
+}
+function fmtISO(iso){ var m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3]+"/"+m[2]+"/"+m[1].slice(2) : ""; }
+function rotuloPeriodo(f){
+  if(!f || !(f.de || f.ate)) return "Todas";
+  if(f.de && f.ate) return f.de===f.ate ? fmtISO(f.de) : fmtISO(f.de)+" a "+fmtISO(f.ate);
+  return f.de ? "desde "+fmtISO(f.de) : "até "+fmtISO(f.ate);
+}
 function opcoesMulti(id){
   var s = {};
   tarefasDaAba().forEach(function(t){
@@ -706,6 +728,8 @@ function normalizarFiltros(){
     var v = state.filtros[c.id];
     if(c.tipo==="multi" && typeof v === "string") state.filtros[c.id] = v ? v.split(", ") : [];
     if(c.tipo==="enum" && typeof v === "string") state.filtros[c.id] = v ? [v] : [];
+    /* Antes estas colunas eram texto livre; texto não vira período. */
+    if(c.tipo==="data" && v != null && (typeof v !== "object" || Array.isArray(v))) delete state.filtros[c.id];
   });
 }
 function colunasVisiveis(){
@@ -1167,6 +1191,7 @@ function filtradas(){
         if(!valoresMulti(t, c.id).some(function(x){ return v.indexOf(x)!==-1; })) return false;
         continue;
       }
+      if(c.tipo==="data"){ if(!dentroDoPeriodo(t[c.id], v)) return false; continue; }
       var alvo = valorDaColuna(t, c.id);
       if(c.tipo==="enum"){ if((Array.isArray(v) ? v : [v]).indexOf(alvo)===-1) return false; }
       else if(norm(alvo).indexOf(norm(v))===-1) return false;
@@ -1415,6 +1440,17 @@ function montarShell(){
   +       '<button data-mt="externos" id="bt-multi-ext">Só externos</button>'
   +       '<button data-mt="nenhum">Limpar</button></div>'
   +     '<div class="pop-lista" id="lista-multi"></div></div></div>'
+  +   '<div class="dd" id="dd-data"><div class="pop pop-fixo pop-data hidden" id="pop-data">'
+  +     '<div class="pop-cab pop-cab-acao"><span id="data-cab"></span>'
+  +       '<button type="button" class="btn btn-primary btn-sm" id="bt-data-filtrar">Filtrar</button></div>'
+  +     '<div class="pop-data-campos">'
+  +       '<label>De<input type="date" id="in-data-de"></label>'
+  +       '<label>Até<input type="date" id="in-data-ate"></label></div>'
+  +     '<div class="pop-acoes">'
+  +       '<button data-dt="hoje">Hoje</button><button data-dt="7">Últimos 7 dias</button>'
+  +       '<button data-dt="30">Últimos 30 dias</button><button data-dt="mes">Este mês</button>'
+  +       '<button data-dt="mesant">Mês passado</button><button data-dt="limpar">Limpar</button></div>'
+  +   '</div></div>'
   +   '<footer class="rodape" id="rodape"></footer>'
   + '</div>'
 
@@ -1526,6 +1562,7 @@ function montarShell(){
    "bt-limpar","cont-linhas","bt-export","bt-colunas","pop-colunas","lista-colunas","ct-colunas",
    "bt-status","pop-status","lista-status","ct-status",
    "pop-multi","multi-cab","bt-multi-filtrar","in-busca-multi","lista-multi","bt-multi-todos","bt-multi-ext",
+   "pop-data","data-cab","bt-data-filtrar","in-data-de","in-data-ate",
    "scroll","tabela","colgroup","thead","tbody","vazio","rodape","cx-versao","sel-versao",
    "badge-cl","badge-hg","painel-tabela","painel-checklist","painel-homolog",
    "hg-sub","hg-trilha","hg-trilha-txt","hg-pills","in-busca-hg","sel-hg-versao","sel-hg-status",
@@ -1750,6 +1787,7 @@ function fecharPopsTab(){
   el["pop-colunas"].classList.toggle("hidden", state.menuTab!=="colunas");
   el["pop-status"].classList.toggle("hidden", state.menuTab!=="status");
   el["pop-multi"].classList.toggle("hidden", !(state.menuTab && state.menuTab.indexOf("multi:")===0));
+  el["pop-data"].classList.toggle("hidden", !(state.menuTab && state.menuTab.indexOf("data:")===0));
 }
 
 function cabecalho(){
@@ -1789,6 +1827,11 @@ function cabecalho(){
       campo = '<button data-fmulti="'+c.id+'" class="'+(sm.length?"ativo":"")+'"'
         + (sm.length>1 ? ' title="'+esc(sm.join(", "))+'"' : '') + '>'
         + (sm.length===0 ? "Todos" : sm.length===1 ? esc(sm[0]) : sm.length+" selecionados") + '</button>';
+    } else if(c.tipo==="data"){
+      /* Período de/até: abre o #pop-data (ver renderData). */
+      var f = state.filtros[c.id], lig = filtroLigado(f);
+      campo = '<button data-fdata="'+c.id+'" class="'+(lig?"ativo":"")+'" title="'+esc(lig ? c.rot+": "+rotuloPeriodo(f) : "Filtrar por período")+'">'
+        + esc(rotuloPeriodo(f)) + '</button>';
     } else {
       campo = '<input data-filtro="'+c.id+'" class="'+(v?"ativo":"")+'" value="'+esc(v)+'" placeholder="filtrar">';
     }
@@ -1824,7 +1867,44 @@ function cabecalho(){
       if(abrir){ renderMulti(); posicionarMulti(); try{ el["in-busca-multi"].focus(); }catch(err){} }
     };
   });
-  if(state.menuTab && state.menuTab.indexOf("multi:")===0) posicionarMulti();
+  el["thead"].querySelectorAll("[data-fdata]").forEach(function(b){
+    b.onclick = function(e){
+      e.stopPropagation();
+      var id = b.getAttribute("data-fdata");
+      var abrir = state.menuTab !== "data:"+id;
+      if(abrir) state.dataCol = id;
+      alternarMenuTab("data:"+id);
+      if(abrir){ renderData(); posicionarMulti(); try{ el["in-data-de"].focus(); }catch(err){} }
+    };
+  });
+  if(state.menuTab && /^(multi|data):/.test(state.menuTab)) posicionarMulti();
+}
+
+/* ---------- filtro por período (colunas de data) ----------
+   Mesmo jeito do multi: mexer nos campos não filtra; Filtrar aplica e fecha. */
+function renderData(){
+  var c = COLUNA_POR_ID[state.dataCol]; if(!c) return;
+  var f = state.filtros[c.id] || {};
+  el["data-cab"].innerHTML = '<b>'+esc(c.rot)+'</b> · período';
+  el["in-data-de"].value = f.de || "";
+  el["in-data-ate"].value = f.ate || "";
+}
+function atalhoData(qual){
+  var h = new Date(); h.setHours(0,0,0,0);
+  var de = new Date(h), ate = new Date(h);
+  if(qual==="7") de.setDate(h.getDate()-6);
+  else if(qual==="30") de.setDate(h.getDate()-29);
+  else if(qual==="mes"){ de = new Date(h.getFullYear(), h.getMonth(), 1); ate = new Date(h.getFullYear(), h.getMonth()+1, 0); }
+  else if(qual==="mesant"){ de = new Date(h.getFullYear(), h.getMonth()-1, 1); ate = new Date(h.getFullYear(), h.getMonth(), 0); }
+  el["in-data-de"].value = isoDe(de); el["in-data-ate"].value = isoDe(ate);
+}
+function aplicarData(){
+  var id = state.dataCol, de = el["in-data-de"].value, ate = el["in-data-ate"].value;
+  if(de && ate && de > ate){ var x = de; de = ate; ate = x; }
+  if(de || ate) state.filtros[id] = {de:de, ate:ate};
+  else delete state.filtros[id];
+  state.menuTab = null; fecharPopsTab();
+  cabecalho(); renderTabela(); renderToolbar(); renderResumo();
 }
 
 /* ---------- filtro por lista de valores (Status, Cliente e colunas de opções) ----------
@@ -1893,9 +1973,10 @@ function renderMulti(){
 /* Fixo na janela, então é preciso recalcular quando a tabela rola ou o
    cabeçalho é remontado. Encosta na borda direita se não couber. */
 function posicionarMulti(){
-  var pop = el["pop-multi"];
+  var ehData = !!(state.menuTab && state.menuTab.indexOf("data:")===0);
+  var pop = el[ehData ? "pop-data" : "pop-multi"];
   if(pop.classList.contains("hidden")) return;
-  var b = el["thead"].querySelector('[data-fmulti="'+state.multiCol+'"]');
+  var b = el["thead"].querySelector(ehData ? '[data-fdata="'+state.dataCol+'"]' : '[data-fmulti="'+state.multiCol+'"]');
   if(!b){ state.menuTab = null; fecharPopsTab(); return; }
   var r = b.getBoundingClientRect(), w = pop.offsetWidth || 320;
   var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
@@ -3812,6 +3893,17 @@ function ligarEventos(){
       var novos = opcoesMultiVisiveis().map(function(o){ return o.v; });
       if(a==="externos") novos = novos.filter(function(v){ return v!=="Interna"; });
       marcarFiltroRascunho(s.concat(novos.filter(function(v){ return s.indexOf(v)===-1; })));
+    };
+  });
+  el["bt-data-filtrar"].onclick = function(e){ e.stopPropagation(); aplicarData(); };
+  ["in-data-de","in-data-ate"].forEach(function(id){
+    el[id].addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); aplicarData(); } });
+  });
+  el["pop-data"].querySelectorAll("[data-dt]").forEach(function(b){
+    b.onclick = function(){
+      var a = b.getAttribute("data-dt");
+      if(a==="limpar"){ el["in-data-de"].value = ""; el["in-data-ate"].value = ""; return; }
+      atalhoData(a);
     };
   });
   el["scroll"].addEventListener("scroll", posicionarMulti, {passive:true});
