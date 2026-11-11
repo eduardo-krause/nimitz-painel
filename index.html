@@ -352,6 +352,7 @@ thead tr:nth-child(2) th.th-filter:last-child{padding-right:var(--gutter);}
   padding:0 var(--sp-2);height:var(--ctrl-h-sm);font-size:var(--fs-xs);background:var(--surface-3);
   color:var(--text-muted);outline:0;cursor:pointer;text-align:left;font-family:inherit;}
 .th-filter input{cursor:text;}
+.th-filter button{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .th-filter input::placeholder{color:var(--text-faint);}
 .th-filter .ativo,.th-filter select.ativo,.th-filter input.ativo,.th-filter button.ativo{
   background:var(--warn-bg);color:var(--warn-text);font-weight:600;}
@@ -727,6 +728,6 @@ tr:hover .chave svg{opacity:.6;}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261111a"></script>
+<script type="module" src="./boot.js?v=20261111b"></script>
 </body>
 </html>

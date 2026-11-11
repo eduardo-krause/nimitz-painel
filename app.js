@@ -93,7 +93,7 @@ var COLUNAS = [
   {id:"summary",     rot:"Resumo",            w:340, tipo:"texto"},
   {id:"type",        rot:"Tipo",              w:96,  tipo:"enum"},
   {id:"status",      rot:"Status",            w:152, tipo:"status"},
-  {id:"prazo",       rot:"Prazo",             w:96,  tipo:"data"},
+  {id:"prazo",       rot:"Prazo",             w:144,  tipo:"data"},
   {id:"priority",    rot:"Prioridade",        w:104, tipo:"enum"},
   {id:"testAnalyst", rot:"Analista de testes",w:160, tipo:"enum"},
   {id:"dev",         rot:"Desenvolvedor",     w:160, tipo:"enum"},
@@ -109,8 +109,8 @@ var COLUNAS = [
      Vêm escondidas por padrão para não estourar a largura da tabela. */
   {id:"versoes",     rot:"Versão",            w:128, tipo:"texto"},
   {id:"impedida",    rot:"Impedimento",       w:104, tipo:"enum"},
-  {id:"updated",     rot:"Atualizado",        w:128, tipo:"data"},
-  {id:"resolvido",   rot:"Resolvido",         w:112, tipo:"data"},
+  {id:"updated",     rot:"Atualizado",        w:144, tipo:"data"},
+  {id:"resolvido",   rot:"Resolvido",         w:144, tipo:"data"},
   /* O rank é o token de ordenação do board (LexoRank). Não é texto para
      humano, mas é campo do Jira — fica disponível para quem quiser. */
   {id:"rank",        rot:"Classificação",     w:120, tipo:"texto"},
@@ -149,7 +149,7 @@ var COLUNAS = [
   {id:"tarefaOrigem", rot:"Tarefa origem", w:120, tipo:"texto"},
   {id:"branch", rot:"Branch", w:160, tipo:"texto"},
   {id:"motivoReprov", rot:"Motivo reprovação", w:176, tipo:"texto"},
-  {id:"criado", rot:"Criado", w:128, tipo:"data"},
+  {id:"criado", rot:"Criado", w:144, tipo:"data"},
   {id:"primeiraResp", rot:"Primeira resposta", w:144, tipo:"data"},
   {id:"estDesenv", rot:"Estimativa de desenvolvimento", w:208, tipo:"texto"},
   {id:"estRequisitos", rot:"Estimativa de requisitos", w:176, tipo:"texto"},
@@ -709,7 +709,12 @@ function dentroDoPeriodo(valor, f){
 function fmtISO(iso){ var m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3]+"/"+m[2]+"/"+m[1].slice(2) : ""; }
 function rotuloPeriodo(f){
   if(!f || !(f.de || f.ate)) return "Todas";
-  if(f.de && f.ate) return f.de===f.ate ? fmtISO(f.de) : fmtISO(f.de)+" a "+fmtISO(f.ate);
+  if(f.de && f.ate){
+    if(f.de===f.ate) return fmtISO(f.de);
+    /* Mesmo ano: o ano vai só no fim, para caber numa linha. */
+    if(f.de.slice(0,4)===f.ate.slice(0,4)) return fmtISO(f.de).slice(0,5)+" – "+fmtISO(f.ate);
+    return fmtISO(f.de)+" – "+fmtISO(f.ate);
+  }
   return f.de ? "desde "+fmtISO(f.de) : "até "+fmtISO(f.ate);
 }
 function opcoesMulti(id){
