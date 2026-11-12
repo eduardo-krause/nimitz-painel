@@ -1,5 +1,23 @@
 import {API_URL} from './config.js';
 const $ = id => document.getElementById(id);
+// Tema escolhido pela pessoa (claro/escuro); sem escolha segue o do sistema.
+const systemDark = matchMedia('(prefers-color-scheme: dark)');
+function currentTheme(){ return document.documentElement.dataset.theme || (systemDark.matches ? 'dark' : 'light'); }
+function paintThemeButton(){
+  const b=$('theme-toggle');if(!b)return;
+  const dark=currentTheme()==='dark';
+  b.textContent=dark?'☀️':'🌙';
+  b.title=b.ariaLabel=dark?'Mudar para tema claro':'Mudar para tema escuro';
+}
+try{ const t=localStorage.getItem('nimitz-theme'); if(t==='dark'||t==='light') document.documentElement.dataset.theme=t; }catch{}
+$('theme-toggle').onclick=()=>{
+  const next=currentTheme()==='dark'?'light':'dark';
+  document.documentElement.dataset.theme=next;
+  try{localStorage.setItem('nimitz-theme',next);}catch{}
+  paintThemeButton();
+};
+systemDark.addEventListener('change',paintThemeButton);
+paintThemeButton();
 const localHost = ['127.0.0.1','localhost'].includes(location.hostname);
 let local = null;
 if (localHost) {
@@ -154,11 +172,13 @@ if (preview && local) {
   $('connection-status').textContent = 'Sem conexão · configure o Jira para carregar tarefas';
 }
 const script = document.createElement('script');
-script.src = './app.js?v=20261111b';
+script.src = './app.js?v=20261112a';
 script.onload = () => {
   const button = $('connection-open');
   document.querySelector('#app .topbar').appendChild(button);
   button.hidden = false;
+  document.querySelector('#app .topbar').appendChild($('theme-toggle'));
+  $('theme-toggle').hidden = false;
   if(!state.connected && !preview) button.click();
   initializePonto();
   state.refreshOrder();
@@ -229,26 +249,31 @@ state.saveOrder = async (person,keys) => {
   } finally { orderSaving=false; state.orderView.render(); }
 };
 
-let pontoFrame=null,pendingTask=null,activeTimer=null;
+let pontoFrame=null,pendingTask=null,pendingStop=false,activeTimer=null;
 state.pontoActive=()=>!!document.querySelector('[data-aba="ponto"].on');
 state.setPontoActive=active=>{
   if(active&&!pontoFrame){
     const panel=$('painel-ponto');if(!panel)return;
     pontoFrame=document.createElement('iframe');pontoFrame.title='Registro';
-    pontoFrame.src='./ponto.html?v=20261111b';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
+    pontoFrame.src='./ponto.html?v=20261112a';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
     panel.appendChild(pontoFrame);
   }
 };
 state.pontoReady=()=>{
-  if(pendingTask&&pontoFrame?.contentWindow?.pontoSelectTask){pontoFrame.contentWindow.pontoSelectTask(pendingTask);pendingTask=null;}
+  const win=pontoFrame?.contentWindow;if(!pendingTask||!win?.pontoSelectTask)return;
+  const key=pendingTask,stop=pendingStop;pendingTask=null;pendingStop=false;
+  if(stop&&win.pontoStopAndSelect) win.pontoStopAndSelect(key);else win.pontoSelectTask(key);
 };
 state.updatePontoTimer=timer=>{activeTimer=timer;state.pontoRunning=!!timer?.running;paintTimerBadge();};
+function elapsedText(timer,separator){
+  const seconds=Math.max(0,Math.floor((Date.now()-timer.start)/1000));
+  return Math.floor(seconds/3600)+separator+String(Math.floor(seconds/60)%60).padStart(2,'0');
+}
 function paintTimerBadge(){
   const badge=$('ponto-timer-badge');if(!badge)return;
   badge.hidden=!activeTimer?.running;
   if(activeTimer?.running){
-    const seconds=Math.max(0,Math.floor((Date.now()-activeTimer.start)/1000));
-    badge.textContent=Math.floor(seconds/3600)+':'+String(Math.floor(seconds/60)%60).padStart(2,'0');
+    badge.textContent=elapsedText(activeTimer,':');
     badge.title='Cronômetro ativo: '+(activeTimer.issue||activeTimer.summary||'tarefa');
   }
 }
@@ -257,8 +282,18 @@ function initializePonto(){
   if(state.connected&&!preview) state.setPontoActive(true);
   document.addEventListener('click',event=>{
     const target=event.target.closest('[data-ponto-key]');if(!target)return;
-    event.preventDefault();event.stopPropagation();pendingTask=target.dataset.pontoKey;
-    document.querySelector('[data-aba="ponto"]').click();state.pontoReady();
+    event.preventDefault();event.stopPropagation();
+    const key=target.dataset.pontoKey;
+    const goToPonto=stop=>{pendingTask=key;pendingStop=stop;document.querySelector('[data-aba="ponto"]').click();state.pontoReady();};
+    // Já está cronometrando essa mesma tarefa: só abre o Registro.
+    if(!activeTimer?.running||(activeTimer.issue&&activeTimer.issue===key)){goToPonto(false);return;}
+    const running=activeTimer.issue||activeTimer.summary||'outra tarefa';
+    $('ponto-switch-text').textContent='O registro de '+running+' está rodando há '+elapsedText(activeTimer,'h')+'. Para iniciar '+key+', ele precisa ser parado.';
+    const dialog=$('ponto-switch-dialog');
+    dialog.returnValue='';
+    dialog.onclose=()=>{if(dialog.returnValue==='confirm')goToPonto(true);};
+    dialog.showModal();
+    dialog.querySelector('[value="confirm"]').focus();
   });
   setInterval(paintTimerBadge,1000);
 }

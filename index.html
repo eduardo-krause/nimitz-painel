@@ -13,9 +13,23 @@
 .ponto-key-cell{display:flex;align-items:center;min-width:0;white-space:nowrap;width:120px;flex:none}
 .ponto-key-cell .cl-key{width:auto;flex:0 1 auto}.cl-c-key{min-width:120px}
 #ponto-timer-badge{color:#07594f;background:#d3f3e9;font-variant-numeric:tabular-nums}
+#theme-toggle{padding-left:9px;padding-right:9px}
+#ponto-switch-dialog{width:min(440px,90vw);border:1px solid var(--border-strong);border-radius:12px;padding:22px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-pop);font:14px var(--font-ui)}
+#ponto-switch-dialog::backdrop{background:rgba(10,18,26,.45)}
+#ponto-switch-dialog h2{margin:0 0 10px;font-size:17px}
+#ponto-switch-dialog p{margin:0 0 8px;color:var(--text-muted);line-height:1.45}
+#ponto-switch-dialog .acoes{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
 </style></head>
 <body>
 <button id="connection-open" class="btn" type="button" title="Configurar conexão com o Jira" hidden>Conexão</button>
+<button id="theme-toggle" class="btn" type="button" hidden></button>
+<dialog id="ponto-switch-dialog" aria-labelledby="ponto-switch-title">
+<form method="dialog">
+<h2 id="ponto-switch-title">Registro em andamento</h2>
+<p id="ponto-switch-text"></p>
+<p>Deseja parar o registro atual para iniciar o novo?</p>
+<div class="acoes"><button class="btn" value="cancel" type="submit">Cancelar</button><button class="btn btn-primary" value="confirm" type="submit">Parar e ir para o Registro</button></div>
+</form></dialog>
 <dialog id="connection-dialog" style="width:min(520px,90vw);border:1px solid #acc;border-radius:12px;padding:24px;font:15px system-ui">
 <form id="connection-form">
 <h2 style="margin-top:0">Conectar ao Jira</h2>
@@ -728,6 +742,6 @@ tr:hover .chave svg{opacity:.6;}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261111b"></script>
+<script type="module" src="./boot.js?v=20261112a"></script>
 </body>
 </html>

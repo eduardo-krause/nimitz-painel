@@ -1,4 +1,4 @@
-import {createBridge} from './ponto-bridge.js?v=20261111b';
+import {createBridge} from './ponto-bridge.js?v=20261112a';
 const api=window.parent!==window?window.parent.nimitz:null;
 // O Ponto segue o tema do painel (o painel usa o do sistema, ou data-theme se definido).
 function followPanelTheme(){
@@ -10,6 +10,8 @@ function followPanelTheme(){
 }
 followPanelTheme();
 try{window.parent.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',followPanelTheme);}catch{}
+// Acompanha o botão de tema do painel.
+try{new window.parent.MutationObserver(followPanelTheme).observe(window.parent.document.documentElement,{attributes:true,attributeFilter:['data-theme']});}catch{}
 // Troca o conteúdo por um aviso sem apagar os estilos (eles ficam dentro do body).
 function showOnly(content){
   document.querySelectorAll('body > :not(style):not(script)').forEach(node=>node.remove());
@@ -23,7 +25,7 @@ if(!api?.connected||api.preview){
   try{
     window.pontoBridge=await createBridge(api);
     window.pontoApi=api;
-    await import('./ponto-app.js?v=20261111b');
+    await import('./ponto-app.js?v=20261112a');
   }catch(error){
     const message=document.createElement('p');message.className='ponto-erro';message.textContent='Não foi possível abrir o Registro: '+error.message;
     showOnly(message);

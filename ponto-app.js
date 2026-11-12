@@ -1146,6 +1146,15 @@
     if(timer&&timer.running){ showBanner("Há um cronômetro ativo. Pare-o antes de escolher outra tarefa.","warn",5000); return; }
     $("tabTimer").click(); $("issueIn").value=key; onIssueInput(); $("issueIn").focus();
   };
+  // Painel: a pessoa confirmou parar o registro atual para cronometrar outra tarefa.
+  window.pontoStopAndSelect=async function(key){
+    if(timer&&timer.running){
+      try{ await stop(); }
+      catch(error){ showBanner("Não foi possível parar o registro atual: "+(error?.message||"tente novamente."),"err"); return; }
+    }
+    window.pontoSelectTask(key);
+    showBanner("Registro anterior parado. Clique em iniciar para cronometrar "+key+".");
+  };
   window.addEventListener("unhandledrejection",event=>{
     event.preventDefault();showBanner(event.reason?.message||"Não foi possível salvar. Tente novamente.","err",8000);
   });
