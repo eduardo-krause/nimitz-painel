@@ -567,13 +567,13 @@
         try{ await window.pontoApi.request("/api/ponto/worklog/delete",{issueIdOrKey:jiraOf(en),worklogId:String(en.worklog.id)}); }
         catch(e){
           if(!(e && e.code==="tool_error" && jiraDetail(e).perm)){ local[id]={msg:"Não excluí: "+mcpMsg(e,true),msgKind:"err"}; render(); return; }
-          /* Sem permissão de excluir horas no Jira: o registro é zerado lá (0m)
-             e o lançamento sai daqui. Se nem zerar der, ele fica como estava. */
-          const input={issueIdOrKey:jiraOf(en),worklogId:String(en.worklog.id),timeSpent:"0m",started:isoJira(en.start)};
-          const comment=catName(en); if(comment) input.comment=comment;
+          /* Sem permissão de excluir horas no Jira: o registro é zerado lá e o
+             lançamento sai daqui. O Jira não aceita 0, então vai o mínimo (1m),
+             marcado no comentário. Se nem isso der, ele fica como estava. */
+          const input={issueIdOrKey:jiraOf(en),worklogId:String(en.worklog.id),timeSpent:"1m",started:isoJira(en.start),comment:"Excluído no Ponto"};
           try{ await window.pontoApi.request("/api/ponto/worklog/save",input); }
           catch(e2){ local[id]={msg:"Não excluí: seu usuário do Jira não tem permissão para excluir horas, e não consegui zerar o registro lá ("+mcpMsg(e2,true)+").",msgKind:"err"}; render(); return; }
-          showBanner("Seu usuário do Jira não tem permissão para excluir horas: o registro ficou com 0m no Jira e o lançamento saiu daqui.");
+          showBanner("Seu usuário do Jira não tem permissão para excluir horas: o registro ficou com 1m (mínimo do Jira) e o lançamento saiu daqui.");
         }
         local[id]={};
       }
