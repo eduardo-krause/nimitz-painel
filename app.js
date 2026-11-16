@@ -591,6 +591,9 @@ function atualizarCheck(patch){
 var HG_TIME = ["homolog","homologObs","hgExtra","hgFora","hgProx","hgAtual"];
 var HG_CONSULTA = 20000;
 var LS_HG_SEMEADO = window.nimitz.storagePrefix+"homolog-time-semeado";
+var LS_HG_FILA = window.nimitz.storagePrefix+"homolog-time-fila";
+/* O que ainda não chegou ao servidor sobrevive a recarregar a página. */
+function hgFilaGuardar(){ try{ localStorage.setItem(LS_HG_FILA, JSON.stringify(HGT.voando.concat(HGT.fila))); }catch(e){} }
 var HGT = {fila:[], voando:[], timer:null, enviando:false, desligado:false, iniciado:false, renderPendente:false};
 function hgTimeAtivo(){ return jiraDisponivel() && !HGT.desligado && !!window.nimitz.request; }
 /* Linha embaixo do título: diz a quem olha se as marcas estão indo para a equipe. */
@@ -611,7 +614,7 @@ function hgTimeMudou(a, b, patch){
       if(((k in x) ? x[k] : null) !== v) HGT.fila.push({f:f, k:k, v:v});
     });
   });
-  if(HGT.fila.length) hgTimeAgendar(300);
+  if(HGT.fila.length){ hgFilaGuardar(); hgTimeAgendar(300); }
 }
 function hgTimeAgendar(ms){
   if(!hgTimeAtivo()) return;
@@ -625,6 +628,7 @@ function hgTimeEnviar(){
   HGT.voando = HGT.fila.splice(0);
   window.nimitz.request("/api/shared/homolog/save", {ops:HGT.voando}).then(function(r){
     HGT.enviando = false; HGT.voando = [];
+    hgFilaGuardar();
     try{ localStorage.setItem(LS_HG_SEMEADO, "1"); }catch(e){}
     hgSync("Marcações compartilhadas com a equipe · gravado às "+hgHora());
     hgTimeAdotar(r);
@@ -633,8 +637,8 @@ function hgTimeEnviar(){
     HGT.enviando = false;
     var falhou = HGT.voando; HGT.voando = [];
     console.warn("Homologação compartilhada: falha ao gravar", err);
-    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; hgSync("Marcações só neste navegador: o servidor ainda não tem o compartilhamento. Recarregue a página.", true); return; }
-    if(err && err.status === 400){ hgSync("Marcação recusada pelo servidor: "+msgErro(err), true); return; }
+    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; HGT.fila = falhou.concat(HGT.fila); hgSync("Servidor sem o compartilhamento agora: a marcação fica guardada aqui e vai para a equipe assim que ele responder.", true); return; }
+    if(err && err.status === 400){ hgFilaGuardar(); hgSync("Marcação recusada pelo servidor: "+msgErro(err), true); return; }
     hgSync("Não gravou para a equipe ("+msgErro(err)+"). Tentando de novo…", true);
     HGT.fila = falhou.concat(HGT.fila);
     avisar("err", "Não deu para gravar a marcação da Homologação para a equipe ("+msgErro(err)+"). Tento de novo em instantes.");
@@ -664,14 +668,14 @@ function hgTimeRender(){
   renderTopo();
 }
 function hgTimeConsultar(){
-  if(!hgTimeAtivo()){
-    hgSync(HGT.desligado ? "Marcações só neste navegador: o servidor ainda não tem o compartilhamento. Recarregue a página."
-      : "Sem conexão com o Jira: marcações só neste navegador.", true);
+  if(!jiraDisponivel() || !window.nimitz.request){
+    hgSync("Sem conexão com o Jira: marcações só neste navegador.", true);
     return;
   }
   if(HGT.renderPendente && !editandoAgora()) hgTimeRender();
   if(HGT.enviando) return;
   window.nimitz.request("/api/shared/homolog/get", {}).then(function(r){
+    if(HGT.desligado){ HGT.desligado = false; if(HGT.fila.length) hgTimeAgendar(0); }
     /* Primeira vez neste navegador: o que foi marcado aqui antes de existir o
        compartilhado sobe para a equipe (só o que falta lá, sem apagar nada). */
     var semeado = true; try{ semeado = !!localStorage.getItem(LS_HG_SEMEADO); }catch(e){}
@@ -688,13 +692,14 @@ function hgTimeConsultar(){
       hgSync("Marcações compartilhadas com a equipe · conferido às "+hgHora());
   }).catch(function(err){
     console.warn("Homologação compartilhada: falha ao consultar", err);
-    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; hgSync("Marcações só neste navegador: o servidor ainda não tem o compartilhamento. Recarregue a página.", true); }
+    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; hgSync("Servidor sem o compartilhamento agora: as marcações ficam guardadas aqui e vão para a equipe assim que ele responder.", true); }
     else hgSync("Não consegui buscar as marcações da equipe ("+msgErro(err)+").", true);
   });
 }
 function iniciarHgTime(){
   if(HGT.iniciado) return;
   HGT.iniciado = true;
+  try{ var f = JSON.parse(localStorage.getItem(LS_HG_FILA) || "[]"); if(Array.isArray(f)) HGT.fila = f.concat(HGT.fila); }catch(e){}
   hgTimeConsultar();
   setInterval(function(){ if(document.visibilityState === "visible") hgTimeConsultar(); }, HG_CONSULTA);
   document.addEventListener("visibilitychange", function(){ if(document.visibilityState === "visible") hgTimeConsultar(); });
