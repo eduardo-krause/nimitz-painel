@@ -517,13 +517,14 @@
     const seen = new Set(), rec=[];
     for(const e of entries){ if(!e.task && !seen.has(e.issue)){ seen.add(e.issue); rec.push(e); if(rec.length>=6) break; } }
     $("recent").hidden = !rec.length && !tasks.length;
+    renderReport();
     $("recent").innerHTML = (tasks.length ? `<span class="lbl">Tarefas</span>`+tasks.map(t=>`<button class="chip task" data-qtask="${esc(t.id)}" title="Iniciar ${esc(t.name)}"><b>${esc(t.name)}</b></button>`).join("") : "")
       + (rec.length ? `<span class="lbl" style="margin-left:${tasks.length?"10px":"0"}">Recentes</span>`+rec.map(e=>`<button class="chip" data-quick="${esc(e.issue)}" title="Iniciar ${esc(e.issue)}"><b>${esc(e.issue)}</b><span>${esc(e.summary||"")}</span></button>`).join("") : "");
   }
 
   document.addEventListener("click", async ev=>{
     const t = ev.target.closest("button,a"); if(!t) return;
-    const find = id => entries.find(e=>e.id===id);
+    const find = findMine;
     if(t.dataset.send){ const en=find(t.dataset.send); if(en) sendWorklog(en); }
     else if(t.dataset.fixsum){
       const key=t.dataset.fixsum; t.disabled=true; t.textContent="Buscando…";
@@ -578,7 +579,7 @@
         local[id]={};
       }
       // com worklog no Jira fica marcado como excluído; senão a próxima busca no Jira traria de volta
-      try{ if(en && en.worklog && en.worklog.id) await col.doc(id).update({deleted:true}); else await col.doc(id).delete(); }catch(e){ local[id]={msg:"Não foi possível excluir: "+(e.message||e.code),msgKind:"err"}; render(); } }
+      try{ if(en && en.worklog && en.worklog.id) await col.doc(id).update({deleted:true}); else await col.doc(id).delete(); dropMyCache(); render(); }catch(e){ local[id]={msg:"Não foi possível excluir: "+(e.message||e.code),msgKind:"err"}; render(); } }
     else if(t.hasAttribute("data-cancel")){ editing=null; render(); }
   });
 
@@ -623,7 +624,7 @@
       if(f.dataset.edit==="new"){
         await myEntries().add({issue,...tfields,summary,category,categoryName,start:s,end:e,worklog:{status:"pending"}});
       } else {
-        const en = entries.find(x=>x.id===f.dataset.edit);
+        const en = findMine(f.dataset.edit);
         const sameTarget = gk(en)===(tk?"t:"+tk.id:issue) && jiraOf(en)===(tk?(tk.jira||""):issue);
         const changed = !sameTarget || en.start!==s || en.end!==e || (en.category||"")!==category;
         const patch = {issue,...tfields,summary:tk?"":(summary||en.summary),category,categoryName,start:s,end:e};
@@ -631,6 +632,7 @@
           patch.worklog = Object.assign({},en.worklog,{dirty:true, id: sameTarget ? en.worklog.id : null});
         }
         await myEntries().doc(en.id).update(patch);
+        dropMyCache();
       }
       editing=null; render();
     }catch(err){ errEl.textContent="Não foi possível salvar: "+(err.message||err.code); }
@@ -783,9 +785,8 @@
       if(!gotEntries){ gotEntries = true; if(gotJira) autoSync(k); }
       entries.forEach(e=>{ if(e.summary && !summaries[e.issue]) summaries[e.issue]=e.summary; if(e.summary && local[e.id] && local[e.id].fix) delete local[e.id]; });
       if(noName().length) fillMissing();
-      if(editing && editing!=="new" && !entries.find(e=>e.id===editing)) editing=null;
+      if(editing && editing!=="new" && !findMine(editing)) editing=null;
       if(!document.querySelector("form.edit")) render();
-      renderReport();
     }, err=>{ showBanner("Não foi possível carregar os lançamentos ("+err.code+"). Recarregue a página.","err"); }));
     mySubs.push(myTimer().onSnapshot(s=>{ if(k!==myKey()) return; timer = s.exists ? Object.assign({}, s.data()) : {running:false}; paintTimer(); render(); }, ()=>{}));
     mySubs.push(mySettings().onSnapshot(s=>{ if(k!==myKey()) return; settings = Object.assign({autoSend:false}, s.exists ? s.data() : {}); $("autoSend").checked = !!settings.autoSend; }, ()=>{}));
@@ -804,8 +805,8 @@
   /* ---------- Boot ---------- */
 
   /* ---------- Relatório ---------- */
-  let rSort = {by:"total",dir:-1}, rOpen = new Set(), rLastRows = [];
-  const DAY = 864e5;
+  var rSort = {by:"total",dir:-1}, rOpen = new Set(), rLastRows = [];
+  var DAY = 864e5;
   function dayStart(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
   function addDays(t,n){ const d=new Date(t); return new Date(d.getFullYear(),d.getMonth(),d.getDate()+n).getTime(); }
   function fmtDate(ms){ const d=new Date(ms); return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+String(d.getFullYear()).slice(2); }
@@ -840,7 +841,14 @@
   }
 
   // a página mantém os 1000 lançamentos mais recentes de cada pessoa; períodos mais antigos são buscados sob demanda
-  const rangeCache = {}, rangeBusy = {};
+  var rangeCache = {}, rangeBusy = {};
+  // lançamento meu: os carregados ou os antigos que o relatório buscou
+  function findMine(id){
+    const e = entries.find(x=>x.id===id); if(e) return e;
+    for(const ck in rangeCache) if(ck.startsWith(myKey()+"|")){ const x = rangeCache[ck].find(y=>y.id===id); if(x) return x; }
+    return null;
+  }
+  function dropMyCache(){ for(const ck in rangeCache) if(ck.startsWith(myKey()+"|")){ delete rangeCache[ck]; delete rangeBusy[ck]; } }
   function listFor(k){ return k===myKey() ? entries : (team[k]||[]); }
   function withRange(k, list){
     const [a,b] = periodRange();
@@ -948,13 +956,23 @@
         <td class="num"><span class="pct">${pct.toFixed(0)}%<i><b style="width:${pct.toFixed(1)}%"></b></i></span></td></tr>`;
       if(open){
         const its = r.items.slice().sort((x,y)=>x.start-y.start);
-        const head = `<div class="dr dh"><span>Data</span><span>Início → Fim</span><span>Categoria</span>${teamMode?"<span>Pessoa</span>":""}<span style="text-align:right">Duração</span></div>`;
-        h += `<tr class="det"><td colspan="${teamMode?8:7}"><div class="detlist${teamMode?" team":""}">${head}${its.map(e=>`<div class="dr">
+        const head = `<div class="dr dh"><span>Data</span><span>Início → Fim</span><span>Categoria</span>${teamMode?"<span>Pessoa</span>":""}<span style="text-align:right">Duração</span><span></span></div>`;
+        const detRow = e=>{
+          const mine = e._pk===myKey(), L = local[e.id]||{}, w = e.worklog||{};
+          if(mine && editing===e.id) return `<div class="dr-edit">${editForm(e)}</div>`;
+          const acts = !mine ? "" : L.sending ? `<span class="sub">Excluindo…</span>`
+            : confirmDel===e.id ? `<button class="btn small danger" data-del-yes="${esc(e.id)}">Excluir</button><button class="btn small" data-del-no>Não</button>`
+            : `<button class="icon" title="Editar" data-edit-btn="${esc(e.id)}">${ICON.edit}</button><button class="icon" title="Excluir" data-del="${esc(e.id)}">${ICON.del}</button>`;
+          const msg = mine && L.msg ? `<div class="d-msg ${L.msgKind==="warn"?"warn":""}">${esc(L.msg)}</div>`
+            : mine && confirmDel===e.id && (w.status==="sent" || w.id) ? `<div class="d-msg warn">${zeroable(e) ? "Este lançamento será excluído também do Jira. Esta ação não pode ser desfeita pelo painel." : "Já está no Jira. Excluir aqui não remove o registro de lá; ajuste direto no Jira."}</div>` : "";
+          return `<div class="dr">
           <span class="d-day">${DOW[new Date(e.start).getDay()]}<b>${fmtDate(e.start)}</b></span>
           <span class="d-time">${hhmm(e.start)}<i>→</i>${e.end?hhmm(e.end):"…"}</span>
           <span class="d-cat">${catName(e)?`<span class="cat" style="font-size:12.5px;color:var(--ink)"><i style="background:${esc(catColor(e))}"></i>${esc(catName(e))}</span>`:`<span class="sub">—</span>`}</span>
           ${teamMode?`<span class="d-who">${esc(personName(e._pk).replace(" (você)",""))}</span>`:""}
-          <span class="d-dur">${hm(dur(e))}</span></div>`).join("")}</div></td></tr>`;
+          <span class="d-dur">${hm(dur(e))}</span><span class="d-acts">${acts}</span>${msg}</div>`;
+        };
+        h += `<tr class="det"><td colspan="${teamMode?8:7}"><div class="detlist${teamMode?" team":""}">${head}${its.map(detRow).join("")}</div></td></tr>`;
       }
     });
     h += `</tbody><tfoot><tr><td colspan="${teamMode?4:3}">Total</td><td class="num">${list.length}</td><td></td><td class="num">${hm(total)}</td><td class="num">100%</td></tr></tfoot></table>`;
@@ -990,6 +1008,7 @@
 
   function showView(v){
     const rep = v==="relatorio";
+    editing = null; confirmDel = null;
     $("viewTimer").hidden = rep; $("viewReport").hidden = !rep;
     $("tabTimer").setAttribute("aria-pressed", String(!rep)); $("tabReport").setAttribute("aria-pressed", String(rep));
     try{ history.replaceState(null,"", rep ? "#relatorio" : location.pathname+location.search); }catch(_){}

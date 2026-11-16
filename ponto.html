@@ -224,8 +224,13 @@ table.rep tr.det td{background:var(--bg);padding:6px 12px 10px 36px}
 table.rep tfoot td{font-weight:600;border-top:2px solid var(--line)}
 /* registros da demanda: um por linha, em colunas alinhadas (data | início → fim | categoria | pessoa | duração) */
 .detlist{display:flex;flex-direction:column;font-size:13px}
-.detlist .dr{display:grid;grid-template-columns:130px 170px minmax(0,1fr) 90px;gap:16px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)}
-.detlist.team .dr{grid-template-columns:130px 170px minmax(0,1fr) minmax(0,200px) 90px}
+.detlist .dr{display:grid;grid-template-columns:130px 170px minmax(0,1fr) 90px 150px;gap:16px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--line)}
+.detlist.team .dr{grid-template-columns:130px 170px minmax(0,1fr) minmax(0,200px) 90px 150px}
+.detlist .d-acts{display:flex;gap:4px;justify-content:flex-end;align-items:center}
+.detlist .d-msg{grid-column:1/-1;font-size:12.5px;color:var(--err)}
+.detlist .d-msg.warn{color:var(--warn)}
+.detlist .dr-edit{border-bottom:1px solid var(--line)}
+.detlist .dr-edit .edit{border-top:0}
 .detlist .dr:last-child{border-bottom:0}
 .detlist .dh{font-size:11px;color:var(--muted);font-weight:600;padding-top:2px;padding-bottom:5px}
 .detlist .d-day{color:var(--muted)}
@@ -235,7 +240,7 @@ table.rep tfoot td{font-weight:600;border-top:2px solid var(--line)}
 .detlist .d-cat,.detlist .d-who{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .detlist .d-who{color:var(--muted)}
 .detlist .d-dur{text-align:right;font-family:var(--f-mono);font-weight:600}
-@media (max-width:760px){ .detlist .dr,.detlist.team .dr{grid-template-columns:1fr auto;gap:2px 12px} .detlist .dh{display:none} .detlist .d-time{grid-row:2} .detlist .d-cat,.detlist .d-who{grid-column:1/-1} .detlist .d-dur{grid-row:1;grid-column:2} }
+@media (max-width:760px){ .detlist .dr,.detlist.team .dr{grid-template-columns:1fr auto;gap:2px 12px} .detlist .dh{display:none} .detlist .d-time{grid-row:2} .detlist .d-cat,.detlist .d-who{grid-column:1/-1} .detlist .d-dur{grid-row:1;grid-column:2} .detlist .d-acts{grid-row:2;grid-column:2} }
 .copied{font-size:12.5px;color:var(--ok)}
 @media (max-width:760px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} }
 @media (max-width:1100px){
@@ -492,5 +497,5 @@ table.rep th{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--fai
 @media(max-width:650px){.wrap{padding:12px 12px 28px}}
 .ponto-aviso{padding:24px 16px;color:var(--muted);font-size:13px}.ponto-aviso p{margin:8px 0 0}.ponto-aviso b{color:var(--ink)}
 .rotulo-ponto{font-size:10px;font-weight:700;color:var(--ink)}.ponto-erro{color:var(--err);margin:0}
-</style><script type="module" src="./ponto-boot.js?v=20261113a"></script>
+</style><script type="module" src="./ponto-boot.js?v=20261116a"></script>
 </body></html>
