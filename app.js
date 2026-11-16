@@ -577,8 +577,111 @@ function salvarCheck(){
 }
 function atualizarCheck(patch){
   if(typeof patch === "function") patch = patch(state.check);
+  var antes = state.check;
   state.check = Object.assign({}, state.check, patch);
   salvarCheck();
+  hgTimeMudou(antes, state.check, patch);
+}
+
+/* ---------- Homologação compartilhada ----------
+   Marca de testada, observação e quem entra/sai da fila (ou muda de rodada)
+   valem para a equipe inteira: ficam no Worker, não só neste navegador. Cada
+   mudança vai como operação (campo, tarefa, valor) e o Worker aplica sobre a
+   versão atual — duas pessoas marcando juntas não apagam a marca da outra. */
+var HG_TIME = ["homolog","homologObs","hgExtra","hgFora","hgProx","hgAtual"];
+var HG_CONSULTA = 20000;
+var LS_HG_SEMEADO = window.nimitz.storagePrefix+"homolog-time-semeado";
+var HGT = {fila:[], voando:[], timer:null, enviando:false, desligado:false, iniciado:false, renderPendente:false};
+function hgTimeAtivo(){ return jiraDisponivel() && !HGT.desligado && !!window.nimitz.request; }
+function hgTimeMudou(a, b, patch){
+  if(!patch || HGT.adotando) return;
+  HG_TIME.forEach(function(f){
+    if(!(f in patch)) return;
+    var x = a[f] || {}, y = b[f] || {}, ks = {};
+    Object.keys(x).concat(Object.keys(y)).forEach(function(k){ ks[k] = 1; });
+    Object.keys(ks).forEach(function(k){
+      var v = (k in y) ? y[k] : null;
+      if(((k in x) ? x[k] : null) !== v) HGT.fila.push({f:f, k:k, v:v});
+    });
+  });
+  if(HGT.fila.length) hgTimeAgendar(300);
+}
+function hgTimeAgendar(ms){
+  if(!hgTimeAtivo()) return;
+  clearTimeout(HGT.timer);
+  HGT.timer = setTimeout(hgTimeEnviar, ms);
+}
+function hgTimeEnviar(){
+  HGT.timer = null;
+  if(!hgTimeAtivo() || HGT.enviando || !HGT.fila.length) return;
+  HGT.enviando = true;
+  HGT.voando = HGT.fila.splice(0);
+  window.nimitz.request("/api/shared/homolog/save", {ops:HGT.voando}).then(function(r){
+    HGT.enviando = false; HGT.voando = [];
+    try{ localStorage.setItem(LS_HG_SEMEADO, "1"); }catch(e){}
+    hgTimeAdotar(r);
+    if(HGT.fila.length) hgTimeAgendar(300);
+  }).catch(function(err){
+    HGT.enviando = false;
+    var falhou = HGT.voando; HGT.voando = [];
+    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; return; }
+    if(err && err.status === 400){ console.warn("Marcação da Homologação recusada:", msgErro(err)); return; }
+    HGT.fila = falhou.concat(HGT.fila);
+    avisar("err", "Não deu para gravar a marcação da Homologação para a equipe ("+msgErro(err)+"). Tento de novo em instantes.");
+    hgTimeAgendar(15000);
+  });
+}
+/* Versão do time + o que daqui ainda não chegou lá. */
+function hgTimeAdotar(r){
+  if(!r || !r.data) return;
+  var patch = {}, mudou = false;
+  HG_TIME.forEach(function(f){
+    var o = Object.assign({}, r.data[f] || {});
+    HGT.voando.concat(HGT.fila).forEach(function(op){ if(op.f !== f) return; if(op.v === null) delete o[op.k]; else o[op.k] = op.v; });
+    if(JSON.stringify(o) !== JSON.stringify(state.check[f] || {})){ patch[f] = o; mudou = true; }
+  });
+  if(!mudou) return;
+  HGT.adotando = true;
+  try{ state.check = Object.assign({}, state.check, patch); salvarCheck(); }
+  finally{ HGT.adotando = false; }
+  hgTimeRender();
+}
+function hgTimeRender(){
+  /* Recriar a lista embaixo de quem digita a observação derrubaria o texto. */
+  if(editandoAgora()){ HGT.renderPendente = true; return; }
+  HGT.renderPendente = false;
+  if(state.aba === "homolog") renderHomolog();
+  renderTopo();
+}
+function hgTimeConsultar(){
+  if(!hgTimeAtivo()) return;
+  if(HGT.renderPendente && !editandoAgora()) hgTimeRender();
+  if(HGT.enviando) return;
+  window.nimitz.request("/api/shared/homolog/get", {}).then(function(r){
+    /* Primeira vez neste navegador: o que foi marcado aqui antes de existir o
+       compartilhado sobe para a equipe (só o que falta lá, sem apagar nada). */
+    var semeado = true; try{ semeado = !!localStorage.getItem(LS_HG_SEMEADO); }catch(e){}
+    if(!semeado){
+      HG_TIME.forEach(function(f){
+        var meu = state.check[f] || {}, dele = (r.data || {})[f] || {};
+        Object.keys(meu).forEach(function(k){ if(!(k in dele)) HGT.fila.push({f:f, k:k, v:meu[k]}); });
+      });
+      if(HGT.fila.length) hgTimeAgendar(0);
+      else try{ localStorage.setItem(LS_HG_SEMEADO, "1"); }catch(e){}
+    }
+    hgTimeAdotar(r);
+  }).catch(function(err){
+    if(err && (err.status === 404 || err.status === 503)) HGT.desligado = true;
+    else console.warn("Não deu para consultar a Homologação da equipe:", msgErro(err));
+  });
+}
+function iniciarHgTime(){
+  if(HGT.iniciado) return;
+  HGT.iniciado = true;
+  hgTimeConsultar();
+  setInterval(function(){ if(document.visibilityState === "visible") hgTimeConsultar(); }, HG_CONSULTA);
+  document.addEventListener("visibilitychange", function(){ if(document.visibilityState === "visible") hgTimeConsultar(); });
+  document.addEventListener("focusout", function(){ setTimeout(function(){ if(HGT.renderPendente && !editandoAgora()) hgTimeRender(); }, 0); });
 }
 function carregarLocal(){
   try{
@@ -4652,6 +4755,7 @@ iniciarRetomada();
 renderTudo();
 aplicarRetomada();
 iniciarComp();
+iniciarHgTime();
 if(!jiraDisponivel()){
   avisar("info","Prévia sem conexão com o Jira. Abra Conexão para consultar dados atuais.");
 } else if(!state.tarefas.length){
