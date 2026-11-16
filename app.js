@@ -593,6 +593,13 @@ var HG_CONSULTA = 20000;
 var LS_HG_SEMEADO = window.nimitz.storagePrefix+"homolog-time-semeado";
 var HGT = {fila:[], voando:[], timer:null, enviando:false, desligado:false, iniciado:false, renderPendente:false};
 function hgTimeAtivo(){ return jiraDisponivel() && !HGT.desligado && !!window.nimitz.request; }
+/* Linha embaixo do título: diz a quem olha se as marcas estão indo para a equipe. */
+function hgSync(txt, erro){
+  HGT.status = {txt:txt, erro:!!erro};
+  var n = document.getElementById("hg-sync"); if(!n) return;
+  n.textContent = txt; n.style.color = erro ? "var(--err, #c0392b)" : "";
+}
+function hgHora(){ var d = new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0"); }
 function hgTimeMudou(a, b, patch){
   if(!patch || HGT.adotando) return;
   HG_TIME.forEach(function(f){
@@ -619,13 +626,16 @@ function hgTimeEnviar(){
   window.nimitz.request("/api/shared/homolog/save", {ops:HGT.voando}).then(function(r){
     HGT.enviando = false; HGT.voando = [];
     try{ localStorage.setItem(LS_HG_SEMEADO, "1"); }catch(e){}
+    hgSync("Marcações compartilhadas com a equipe · gravado às "+hgHora());
     hgTimeAdotar(r);
     if(HGT.fila.length) hgTimeAgendar(300);
   }).catch(function(err){
     HGT.enviando = false;
     var falhou = HGT.voando; HGT.voando = [];
-    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; return; }
-    if(err && err.status === 400){ console.warn("Marcação da Homologação recusada:", msgErro(err)); return; }
+    console.warn("Homologação compartilhada: falha ao gravar", err);
+    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; hgSync("Marcações só neste navegador: o servidor ainda não tem o compartilhamento. Recarregue a página.", true); return; }
+    if(err && err.status === 400){ hgSync("Marcação recusada pelo servidor: "+msgErro(err), true); return; }
+    hgSync("Não gravou para a equipe ("+msgErro(err)+"). Tentando de novo…", true);
     HGT.fila = falhou.concat(HGT.fila);
     avisar("err", "Não deu para gravar a marcação da Homologação para a equipe ("+msgErro(err)+"). Tento de novo em instantes.");
     hgTimeAgendar(15000);
@@ -654,7 +664,11 @@ function hgTimeRender(){
   renderTopo();
 }
 function hgTimeConsultar(){
-  if(!hgTimeAtivo()) return;
+  if(!hgTimeAtivo()){
+    hgSync(HGT.desligado ? "Marcações só neste navegador: o servidor ainda não tem o compartilhamento. Recarregue a página."
+      : "Sem conexão com o Jira: marcações só neste navegador.", true);
+    return;
+  }
   if(HGT.renderPendente && !editandoAgora()) hgTimeRender();
   if(HGT.enviando) return;
   window.nimitz.request("/api/shared/homolog/get", {}).then(function(r){
@@ -670,9 +684,12 @@ function hgTimeConsultar(){
       else try{ localStorage.setItem(LS_HG_SEMEADO, "1"); }catch(e){}
     }
     hgTimeAdotar(r);
+    if(!(HGT.status && HGT.status.erro && HGT.fila.length))
+      hgSync("Marcações compartilhadas com a equipe · conferido às "+hgHora());
   }).catch(function(err){
-    if(err && (err.status === 404 || err.status === 503)) HGT.desligado = true;
-    else console.warn("Não deu para consultar a Homologação da equipe:", msgErro(err));
+    console.warn("Homologação compartilhada: falha ao consultar", err);
+    if(err && (err.status === 404 || err.status === 503)){ HGT.desligado = true; hgSync("Marcações só neste navegador: o servidor ainda não tem o compartilhamento. Recarregue a página.", true); }
+    else hgSync("Não consegui buscar as marcações da equipe ("+msgErro(err)+").", true);
   });
 }
 function iniciarHgTime(){
@@ -1618,7 +1635,8 @@ function montarShell(){
   + '<div class="painel" id="painel-homolog">'
   +   '<div class="cl-head">'
   +     '<div><div class="rotulo">Homologação geral</div>'
-  +       '<div class="hg-sub" id="hg-sub"></div></div>'
+  +       '<div class="hg-sub" id="hg-sub"></div>'
+  +       '<div class="hg-sub" id="hg-sync" style="font-size:12px"></div></div>'
   +     '<div style="display:flex;align-items:center;gap:10px;">'
   +       '<div class="trilha estreita"><div class="trilha-cheia" id="hg-trilha" style="width:0%"></div></div>'
   +       '<span class="trilha-txt" id="hg-trilha-txt"></span></div>'
