@@ -1281,6 +1281,8 @@ function carimbarGeral(){
 
 /* Atualizacao incremental: pede so o que mudou desde o ultimo carregamento. */
 function atualizar(){
+  /* Atualizar também busca na hora as marcações da Homologação da equipe. */
+  hgTimeConsultar();
   if(!state.tarefas.length){ carregarTudo(); return; }
   /* Do syncGeral, e nao do ultimoSync: este ultimo tambem anda quando alguem
      sincroniza UMA pessoa, e ler o campo errado aqui faria a atualizacao do
