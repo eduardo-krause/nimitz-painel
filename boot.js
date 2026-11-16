@@ -172,7 +172,7 @@ if (preview && local) {
   $('connection-status').textContent = 'Sem conexão · configure o Jira para carregar tarefas';
 }
 const script = document.createElement('script');
-script.src = './app.js?v=20261116d';
+script.src = './app.js?v=20261116e';
 script.onload = () => {
   const button = $('connection-open');
   document.querySelector('#app .topbar').appendChild(button);
@@ -255,7 +255,7 @@ state.setPontoActive=active=>{
   if(active&&!pontoFrame){
     const panel=$('painel-ponto');if(!panel)return;
     pontoFrame=document.createElement('iframe');pontoFrame.title='Registro';
-    pontoFrame.src='./ponto.html?v=20261116d';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
+    pontoFrame.src='./ponto.html?v=20261116e';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
     panel.appendChild(pontoFrame);
   }
 };
@@ -297,3 +297,31 @@ function initializePonto(){
   });
   setInterval(paintTimerBadge,1000);
 }
+
+/* Atualização automática: quando sai versão nova do painel, quem está com ele
+   aberto recarrega sozinho (com a aba escondida, ou sem ninguém digitando),
+   sem depender de Ctrl+F5. O número abaixo muda a cada publicação, junto com
+   o ?v= dos scripts e o versao.txt. */
+const VERSAO_PAINEL = '20261116e';
+function digitandoAgora(){
+  const quem = d => { const a = d && d.activeElement; return !!a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
+  if (quem(document)) return true;
+  try { return [...document.querySelectorAll('iframe')].some(f => quem(f.contentDocument)); } catch { return false; }
+}
+let versaoNova = false;
+function recarregarSePuder(){
+  if (!versaoNova) return;
+  if (document.visibilityState === 'hidden' || !digitandoAgora()) location.reload();
+}
+async function conferirVersao(){
+  if (versaoNova) return recarregarSePuder();
+  try {
+    const r = await fetch('./versao.txt?t=' + Date.now(), {cache:'no-store'});
+    if (!r.ok) return;
+    const v = (await r.text()).trim();
+    if (/^\d{8}[a-z]?$/.test(v) && v !== VERSAO_PAINEL) { versaoNova = true; recarregarSePuder(); }
+  } catch {}
+}
+setInterval(conferirVersao, 60000);
+document.addEventListener('visibilitychange', conferirVersao);
+document.addEventListener('focusout', () => setTimeout(recarregarSePuder, 500));
