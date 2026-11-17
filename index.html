@@ -515,7 +515,7 @@ tr:hover .chave svg{opacity:.6;}
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
   font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .cl-list{flex:1;min-height:0;overflow:auto;}
-#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1344px + 2 * var(--row-gap));}
+#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1476px + 3 * var(--row-gap));}
 .cl-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
   border-bottom:1px solid var(--border);background:var(--surface);}
 .cl-row:hover{background:var(--surface-2);}
@@ -540,7 +540,7 @@ tr:hover .chave svg{opacity:.6;}
 .cl-squad{width:var(--w-squad);flex:none;}
 .cl-cliente{width:var(--w-cliente);flex:none;}
 .cl-prio{width:var(--w-prio);flex:none;}
-.cl-versao{width:var(--w-versao);flex:none;}
+.cl-versao,.cl-entrega{width:var(--w-versao);flex:none;}
 .cl-updated{width:var(--w-entrega);flex:none;display:flex;align-items:center;gap:3px;}
 .cl-dismiss,.cl-c-act{width:var(--w-act);flex:none;}
 /* Posição digitada (como a coluna de prioridade da planilha) e a seta que troca
@@ -556,6 +556,11 @@ tr:hover .chave svg{opacity:.6;}
 .cl-sem button:hover{background:var(--surface-3);color:var(--accent-2);}
 .cl-sem button svg{width:15px;height:15px;}
 .section-sep.sep-semana{color:var(--text);font-weight:600;}
+/* Aba Versões recortada pela Versão entrega: tarefa que saiu em outra versão. */
+tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
+.escorregou-txt{color:var(--warn-text);font-weight:600;}
+.plano-n{font-weight:700;color:var(--text);}
+.plano-n.escorregou-txt{color:var(--warn-text);}
 /* Estilo de TEXTO só dentro da linha, para não vazar no cabeçalho — é o que
    fazia cada rótulo de coluna sair num tamanho diferente no painel antigo. */
 .cl-row .cl-key{font-family:var(--font-mono);font-size:var(--fs-xs);font-weight:700;letter-spacing:-.01em;text-decoration:none;}
@@ -563,6 +568,7 @@ tr:hover .chave svg{opacity:.6;}
 .cl-row .cl-squad,
 .cl-row .cl-cliente,
 .cl-row .cl-versao,
+.cl-row .cl-entrega,
 .cl-row .cl-prio{font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .cl-row .cl-updated{font-family:var(--font-mono);font-size:var(--fs-xs);}
 /* Especificidade: .cl-row .cl-updated já ganha de .prazo-*, então as cores
@@ -655,18 +661,18 @@ tr:hover .chave svg{opacity:.6;}
 .chip-ajuste{background:var(--info-bg);border:1px solid var(--info-border);color:var(--info-text);}
 /* O seletor de versão da linha. Sem cara de campo até o mouse chegar, como a
    observação: são 47 linhas, e 47 caixas desenhadas viram ruído. */
-.hg-versao,.hg-c-versao{width:132px;flex:none;}
-.cl-versao select,.hg-versao select{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
+.hg-versao,.hg-c-versao,.hg-entrega,.hg-c-entrega{width:132px;flex:none;}
+.cl-versao select,.hg-versao select,.cl-entrega select,.hg-entrega select{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
   height:var(--ctrl-h-sm);padding:0 var(--sp-1);font-family:inherit;font-size:var(--fs-sm);
   color:var(--text-faint);cursor:pointer;outline:0;}
-.cl-versao select:hover,.hg-versao select:hover{border-color:var(--border);color:var(--text);}
-.cl-versao select:focus,.hg-versao select:focus{border-color:var(--focus);background:var(--surface);color:var(--text);}
+.cl-versao select:hover,.hg-versao select:hover,.cl-entrega select:hover,.hg-entrega select:hover{border-color:var(--border);color:var(--text);}
+.cl-versao select:focus,.hg-versao select:focus,.cl-entrega select:focus,.hg-entrega select:focus{border-color:var(--focus);background:var(--surface);color:var(--text);}
 .hg-versao.ajustada select{color:var(--info-text);text-decoration:none;}
 .hg-versao.ajustada{text-decoration:none;}
 /* Versão escolhida e ainda não gravada: âmbar, como tudo que está "pendente"
    no painel. Fica no select, não na linha — o verde de .testada segue sendo o
    sinal que se procura descendo a fila. */
-.cl-versao.pendente select,.hg-versao.pendente select{background:var(--warn-bg);border-color:var(--warn-border);
+.cl-versao.pendente select,.hg-versao.pendente select,.cl-entrega.pendente select,.hg-entrega.pendente select{background:var(--warn-bg);border-color:var(--warn-border);
   color:var(--warn-text);font-weight:600;}
 .hg-lote{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--gutter);
   border-bottom:1px solid var(--warn-border);background:var(--warn-bg);color:var(--warn-text);
@@ -758,6 +764,6 @@ tr:hover .chave svg{opacity:.6;}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261117f"></script>
+<script type="module" src="./boot.js?v=20261117g"></script>
 </body>
 </html>

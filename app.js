@@ -11,7 +11,11 @@ var PROJETO   = "NMTZ";
    da aba Tarefas). Até 28/09/2026 a aba Homologação gravava a Versão Entrega;
    o Eduardo corrigiu o pedido: o campo certo sempre foi Versões corrigidas.
    Nunca acrescentar campo a gravarVersoesCorrigidas(): a autorização é nominal
-   a este. Campo novo = decisão nova. */
+   a este. Campo novo = decisão nova.
+   17/11/2026: decisão nova, autorizada pelo Eduardo — a Versão Entrega
+   (customfield_10150) também passa a ser gravada, por gravarVersaoEntrega() e
+   pela rota própria /api/delivery-versions. Ela é o PLANO (versão prevista) e
+   Versões corrigidas o REALIZADO. Mesma chave, mesmo Aplicar, mesma confirmação. */
 var CAMPO_CORRIGIDAS = "fixVersions";
 /* Chaves próprias: o Painel de Tarefas usa o prefixo "nmtz:". Se os dois
    painéis compartilharem a mesma origem de armazenamento, reaproveitar as
@@ -396,6 +400,7 @@ var state = {
      null. Trava o seletor das linhas enquanto a escrita está no ar. */
   hgGravando: null,
   hgRascunho: {},
+  entRascunho: {},
   versoesJira: null,        // versões permitidas do campo Versões corrigidas (fixVersions), lidas do Jira (sem as arquivadas)
   versoesJiraSessao: false, // já tentou buscar nesta sessão (deu certo ou não)
   versoesJiraCarregando: false,           // key -> valor do select (HG_SEM = sem versão), ainda NÃO gravado
@@ -770,6 +775,55 @@ function carregarLocal(){
 function versoesDoJira(t){
   return String(t.versoes||"").split(",").map(function(x){ return x.trim(); }).filter(Boolean);
 }
+/* Versão Entrega (customfield_10150): a versão PLANEJADA. Para agrupar vale a
+   última, como em hgVersaoDe(); sem nenhuma cai no mesmo balde SEM_VERSAO. */
+function entregaDe(t){
+  return String((t && t.versaoEntrega) || "").split(",").map(function(x){ return x.trim(); }).filter(Boolean);
+}
+function entVersaoDe(t){
+  var vs = entregaDe(t);
+  return vs.length ? vs[vs.length-1] : SEM_VERSAO;
+}
+function entregasPresentes(){
+  var s = {};
+  state.tarefas.forEach(function(t){ entregaDe(t).forEach(function(v){ s[v]=true; }); });
+  return Object.keys(s).sort(function(a,b){ return b.localeCompare(a,"pt-BR"); });
+}
+/* Recorte por versão: "c:<versão>" = Versão corrigida, "e:<versão>" = Versão
+   entrega. Valor salvo antes disso (sem prefixo) era sempre a corrigida. */
+function normRecorte(v){ return (v && !/^[ce]:/.test(v)) ? "c:"+v : (v || ""); }
+function casaRecorte(t, r){
+  r = normRecorte(r);
+  if(!r) return true;
+  return (r.charAt(0) === "e" ? entVersaoDe(t) : hgVersaoDe(t)) === r.slice(2);
+}
+function rotuloRecorte(r){
+  r = normRecorte(r);
+  if(!r) return "";
+  return (r.charAt(0) === "e" ? "Entrega " : "Corrigida ") + hgRotuloVersao(r.slice(2));
+}
+/* O seletor de recorte de Checklist e Homologação: dois grupos num select só
+   (a barra não cabe dois), com a contagem de cada versão no recorte dado. */
+function opcoesRecorte(base){
+  var pc = {}, pe = {};
+  base.forEach(function(t){
+    var a = hgVersaoDe(t), b = entVersaoDe(t);
+    pc[a] = (pc[a] || 0) + 1; pe[b] = (pe[b] || 0) + 1;
+  });
+  function grupo(rot, pre, cont){
+    return '<optgroup label="'+rot+'">' + hgOrdemVersoes(Object.keys(cont)).map(function(v){
+      return '<option value="'+esc(pre+v)+'">'+esc((pre === "e:" ? "Entrega " : "Corrigida ")+hgRotuloVersao(v))+' ('+cont[v]+')</option>';
+    }).join("") + '</optgroup>';
+  }
+  return {
+    html: '<option value="">Todas as versões ('+base.length+')</option>'
+      + grupo("Versão corrigida", "c:", pc) + grupo("Versão entrega", "e:", pe),
+    valido: function(r){
+      r = normRecorte(r);
+      return !r || (r.charAt(0) === "e" ? pe : pc)[r.slice(2)] !== undefined;
+    }
+  };
+}
 function ajusteDeVersao(t){
   var a = (state.check.versaoAjuste || {})[t.key];
   return Array.isArray(a) ? a : null;
@@ -892,9 +946,10 @@ function temFiltroAtivo(){
 }
 function tarefasDaAba(){
   if(state.aba!=="versoes" || !state.versaoSel) return state.tarefas;
-  if(state.versaoSel===SEM_VERSAO) return state.tarefas.filter(function(t){ return versoesDe(t).length===0; });
-  var alvo = state.versaoSel;
-  return state.tarefas.filter(function(t){ return versoesDe(t).indexOf(alvo)!==-1; });
+  var r = normRecorte(state.versaoSel), alvo = r.slice(2);
+  var lista = r.charAt(0) === "e" ? entregaDe : versoesDe;
+  if(alvo===SEM_VERSAO) return state.tarefas.filter(function(t){ return lista(t).length===0; });
+  return state.tarefas.filter(function(t){ return lista(t).indexOf(alvo)!==-1; });
 }
 
 /* Na primeira vez classifica os status sozinho, pelas mesmas regras do Painel
@@ -1179,7 +1234,11 @@ function carregarTudo(){
        por pessoa aqui só repetiria um instante mais antigo que este. */
     state.syncPessoa = {};
     /* Se a versão que estava selecionada sumiu do projeto, volta para todas. */
-    if(state.versaoSel && state.versaoSel!==SEM_VERSAO && versoesPresentes().indexOf(state.versaoSel)===-1) state.versaoSel = "";
+    if(state.versaoSel){
+      var rv = normRecorte(state.versaoSel), av = rv.slice(2);
+      var pres = rv.charAt(0) === "e" ? entregasPresentes() : versoesPresentes();
+      if(av !== SEM_VERSAO && pres.indexOf(av) === -1) state.versaoSel = "";
+    }
     salvar();
     inicializarCheck();
     if(info.vazio){
@@ -1495,7 +1554,7 @@ function lerRetomada(){
   if(!RETOMADA) return;
   if(RETOMADA.aba) state.aba = RETOMADA.aba;
   if(typeof RETOMADA.clBusca === "string") state.clBusca = RETOMADA.clBusca;
-  if(typeof RETOMADA.clVersao === "string") state.clVersao = RETOMADA.clVersao;
+  if(typeof RETOMADA.clVersao === "string") state.clVersao = normRecorte(RETOMADA.clVersao);
   if(RETOMADA.fase) state.fase = RETOMADA.fase;
   /* Antes do render: a linha de filtros do cabeçalho é montada a partir de
      state.filtros, então restaurar aqui já devolve o que estava escolhido. */
@@ -1503,7 +1562,7 @@ function lerRetomada(){
   var hg = RETOMADA.hg;
   if(hg && typeof hg === "object"){
     if(typeof hg.busca === "string") state.hgBusca = hg.busca;
-    if(typeof hg.versao === "string") state.hgVersao = hg.versao;
+    if(typeof hg.versao === "string") state.hgVersao = normRecorte(hg.versao);
     if(typeof hg.status === "string") state.hgStatus = hg.status;
     state.hgSoPendentes = !!hg.soPendentes;
     state.hgVerFora = !!hg.verFora;
@@ -1769,11 +1828,17 @@ function renderTopo(){
 
   /* Os dois seletores saem dos dados carregados — nao ha mais campo livre,
      entao nao da pra pedir uma versao ou um nome que nao existe. */
-  var temSemVersao = state.tarefas.some(function(t){ return versoesDe(t).length===0; });
+  /* Dois grupos: Versão corrigida (o realizado) e Versão entrega (o plano). */
+  function grupoV(rot, pre, lista, temSem){
+    return '<optgroup label="'+rot+'">'
+      + (temSem ? '<option value="'+esc(pre+SEM_VERSAO)+'">'+(pre === "e:" ? "Entrega" : "Corrigida")+': sem versão</option>' : "")
+      + lista.map(function(v){ return '<option value="'+esc(pre+v)+'">'+(pre === "e:" ? "Entrega " : "Corrigida ")+esc(v)+'</option>'; }).join("")
+      + '</optgroup>';
+  }
   el["sel-versao"].innerHTML = '<option value="">Todas as versões</option>'
-    + (temSemVersao ? '<option value="'+esc(SEM_VERSAO)+'">Sem versão</option>' : "")
-    + versoesPresentes().map(function(v){ return '<option value="'+esc(v)+'">'+esc(v)+'</option>'; }).join("");
-  el["sel-versao"].value = state.versaoSel;
+    + grupoV("Versão corrigida", "c:", versoesPresentes(), state.tarefas.some(function(t){ return versoesDe(t).length===0; }))
+    + grupoV("Versão entrega", "e:", entregasPresentes(), state.tarefas.some(function(t){ return entregaDe(t).length===0; }));
+  el["sel-versao"].value = normRecorte(state.versaoSel);
 
   var h = "";
   if(state.tarefas.length){
@@ -1830,6 +1895,20 @@ function renderAviso(){
   bar.querySelector(".msg").textContent = state.aviso.texto;
 }
 
+/* Com o recorte pela Versão entrega, o resumo diz quanto do PLANO saiu nela. */
+function resumoDoPlano(base){
+  var r = normRecorte(state.versaoSel);
+  if(r.charAt(0) !== "e" || r.slice(2) === SEM_VERSAO) return "";
+  var v = r.slice(2), nela = 0, outra = 0, sem = 0;
+  base.forEach(function(t){
+    var c = versoesDe(t);
+    if(!c.length) sem++; else if(c.indexOf(v) !== -1) nela++; else outra++;
+  });
+  return '<div class="progresso-num"><span>Plano (Versão entrega '+esc(v)+'): '+base.length+' · '
+    + '<span class="plano-n">'+nela+'</span> com a mesma Versão corrigida · '
+    + '<span class="plano-n escorregou-txt">'+outra+(outra === 1 ? ' saiu' : ' saíram')+' em outra versão</span> · '
+    + sem+' ainda sem Versão corrigida</span></div>';
+}
 function renderResumo(){
   if(state.aba!=="versoes"){ el["resumo"].classList.add("hidden"); return; }
   var base = tarefasDaAba();
@@ -1866,6 +1945,7 @@ function renderResumo(){
   +   '<div class="progresso-num"><b>'+pct+'%</b><span>concluído — '+feitas+' de '+total+' tarefa(s)</span></div>'
   +   '<div class="trilha">'+segmentos+'</div>'
   +   '<div class="progresso-num"><span>'+melhorias+' melhoria(s) · '+bugs+' bug(s)</span></div>'
+  +   resumoDoPlano(base)
   + '</div>'
   + '<div class="tiles">'+tiles+'</div>';
 
@@ -2167,7 +2247,17 @@ function linhaHtml(t){
     resolvido:'<span class="cel-mono cel-faint">'+fmtData(t.resolvido)+'</span>',
     rank:'<span class="cel-mono cel-faint">'+esc(t.rank)+'</span>'
   };
-  return "<tr>"+colunasVisiveis().map(function(c){
+  /* Recorte pela Versão entrega (o plano): a tarefa que saiu em OUTRA versão
+     corrigida escorregou — barra âmbar na linha e a corrigida em destaque. */
+  var rp = state.aba === "versoes" ? normRecorte(state.versaoSel) : "";
+  var planoV = rp.charAt(0) === "e" ? rp.slice(2) : "";
+  var corr = planoV ? versoesDe(t) : [];
+  var escorregou = !!planoV && planoV !== SEM_VERSAO && corr.length > 0 && corr.indexOf(planoV) === -1;
+  if(escorregou){
+    cols.versoes = '<span class="escorregou-txt" title="Planejada para '+esc(planoV)+' (Versão entrega), saiu em '+esc(corr.join(", "))+'">'
+      + esc(versoesTexto(t))+'</span>';
+  }
+  return '<tr'+(escorregou ? ' class="escorregou"' : '')+'>'+colunasVisiveis().map(function(c){
     var cls = (c.id==="summary"||c.id==="cliente"||c.id==="testAnalyst"||c.id==="dev"||c.id==="versoes"||c.id==="rank") ? "corta" : "";
     /* Agora TODA coluna trunca, então toda célula ganha o valor cheio no title —
        antes só Resumo e Cliente truncavam e só elas precisavam. valorDaColuna()
@@ -2438,6 +2528,7 @@ function ordenadasDaPessoa(pessoa){
    ordenação discordaria do que está escrito na tela. */
 function clValorOrd(t, col){
   if(col === "versao") return hgVersaoDe(t) === SEM_VERSAO ? "" : hgVersaoDe(t);
+  if(col === "entrega") return entVersaoDe(t) === SEM_VERSAO ? "" : entVersaoDe(t);
   if(col === "cliente") return infoCliente(t).nome;
   if(COLUNA_POR_ID[col]) return valorDaColuna(t, col);
   return t[col] || "";
@@ -2573,8 +2664,8 @@ function clDerivadosCalc(){
   });
   var q = norm(state.clBusca);
   var visiveis = noFiltro.filter(function(t){
-    if(state.clVersao && hgVersaoDe(t) !== state.clVersao) return false;
-    if(q && norm([t.key,t.summary,t.status,t.squad,t.cliente,hgVersaoDe(t)].join(" ")).indexOf(q)===-1) return false;
+    if(state.clVersao && !casaRecorte(t, state.clVersao)) return false;
+    if(q && norm([t.key,t.summary,t.status,t.squad,t.cliente,hgVersaoDe(t),entVersaoDe(t)].join(" ")).indexOf(q)===-1) return false;
     return true;
   });
   var resumo = {teste:0,dispensada:0,feita:0};
@@ -2758,6 +2849,7 @@ var CL_COLUNAS = [
   {cls:"cl-cliente", rot:"Cliente",    ord:"cliente"},
   {cls:"cl-prio",    rot:"Prioridade", ord:"priority"},
   {cls:"cl-versao",  rot:"Versões corrigidas", ord:"versao"},
+  {cls:"cl-entrega", rot:"Versão entrega", ord:"entrega"},
   {cls:"cl-updated", rot:"Entrega",    ord:"prazo"},
   {cls:"cl-c-act",   rot:""}
 ];
@@ -2901,9 +2993,8 @@ function renderClList(){
       + '<span class="cl-squad cel-faint">'+esc(t.squad)+'</span>'
       + '<span class="cl-cliente'+(cli.externo?"":" cel-faint")+'" title="'+esc(cli.nome)+'">'+esc(cli.nome)+'</span>'
       + '<span class="cl-prio" style="color:'+(estado==="teste"?prio.cor:"var(--text-faint)")+';font-weight:'+(estado==="teste"?prio.peso:"400")+';">'+esc(t.priority)+'</span>'
-      + '<span class="cl-versao'+(hgGravaJira() && state.hgRascunho[t.key] !== undefined ? " pendente" : "")+'" title="Versões corrigidas no Jira'
-      +   (hgGravaJira() ? " — mudar aqui grava lá" : " (gravação desligada — ligue em Versão grava no Jira, na aba Homologação)")+'">'
-      +   opcoesVersaoLinha(t)+'</span>'
+      + celulaVersao("cl-versao", t, "corr")
+      + celulaVersao("cl-entrega", t, "ent")
       + '<span class="cl-updated cel-faint'+mp.cls+'" title="'+esc(mp.titulo)+'">'+mp.icone+fmtData(t.prazo)+'</span>'
       + celulasExtras("checklist", t)
       + '<button class="cl-dismiss" data-act="dispensa"'+(t.impedida?' disabled style="opacity:.35;cursor:default;"':'')
@@ -2936,12 +3027,11 @@ function wireClRows(){
     var btSem = row.querySelector("[data-sem]");
     if(btSem) btSem.onclick = function(){ clMoverSemana(key, btSem.getAttribute("data-sem") === "semana"); };
 
-    var selV = row.querySelector("[data-versao]");
-    if(selV){
-      selV.onchange = function(){ marcarRascunho(key, selV.value); };
+    row.querySelectorAll("[data-versao]").forEach(function(selV){
+      selV.onchange = function(){ marcarRascunho(key, selV.value, selV.getAttribute("data-versao")); };
       /* A linha é arrastável: sem isso, clicar no select pode virar arraste. */
       selV.addEventListener("mousedown", function(e){ e.stopPropagation(); });
-    }
+    });
 
     var btDisp = row.querySelector('[data-act="dispensa"]');
     if(t.impedida) btDisp.onclick = null; else btDisp.onclick = function(){
@@ -3222,6 +3312,7 @@ var HG_COLUNAS = [
   {cls:"hg-c-testes", rot:"Analista de testes", ord:"testAnalyst"},
   {cls:"hg-c-est",    rot:"Estimativa de testes", ord:"estimativa"},
   {cls:"hg-c-versao", rot:"Versões corrigidas", ord:"versao"},
+  {cls:"hg-c-entrega", rot:"Versão entrega", ord:"entrega"},
   {cls:"hg-c-fase",   rot:"Versão atual",   tit:"O que se homologa nesta rodada"},
   {cls:"hg-c-fase",   rot:"Próxima versão", tit:"Fica para a rodada seguinte"},
   {cls:"cl-updated",  rot:"Entrega",    ord:"prazo"},
@@ -3234,6 +3325,7 @@ var HG_COLUNAS = [
    funções que a linha usa para exibi-los. */
 function hgValorOrd(t, col){
   if(col === "versao") return hgVersaoDe(t);
+  if(col === "entrega") return entVersaoDe(t);
   if(col === "obs") return hgObs(t);
   if(COLUNA_POR_ID[col]) return valorDaColuna(t, col);
   return t[col] || "";
@@ -3358,11 +3450,11 @@ function hgDerivados(){
   var todas = state.hgVerFora ? tarefasForaDaFila() : tarefasHomolog();
   var q = norm(state.hgBusca);
   var base = todas.filter(function(t){
-    if(state.hgVersao && hgVersaoDe(t) !== state.hgVersao) return false;
+    if(state.hgVersao && !casaRecorte(t, state.hgVersao)) return false;
     if(state.hgStatus && norm(t.status) !== norm(state.hgStatus)) return false;
     if(q){
       var alvo = norm([t.key, t.summary, t.testAnalyst, t.status, t.type,
-                       hgVersaoDe(t), hgObs(t)].join(" "));
+                       hgVersaoDe(t), entVersaoDe(t), hgObs(t)].join(" "));
       if(alvo.indexOf(q) === -1) return false;
     }
     return true;
@@ -3422,13 +3514,30 @@ function versoesParaAjuste(atual){
 /* Com a gravação desligada a célula é TEXTO, e não um select morto: um campo
    que se mexe e não faz nada é pior que campo nenhum. Quem liga é o time, na
    chave da barra — ver hgGravaJira(). */
-function opcoesVersaoLinha(t){
-  var atual = corrigidasDe(t);
+/* Os dois campos de versão que o painel grava. "corr" = Versões corrigidas
+   (fixVersions, o realizado); "ent" = Versão entrega (customfield_10150, o
+   plano). Cada um tem o seu rascunho; o Aplicar grava os dois. */
+var CAMPO_VERSAO = {
+  corr:{rot:"Versões corrigidas", nome:"versão corrigida", atual:function(t){ return corrigidasDe(t); },
+        rascunho:function(){ return state.hgRascunho; }, gravar:function(k,v){ return gravarVersoesCorrigidas(k,v); }},
+  ent: {rot:"Versão entrega", nome:"versão de entrega", atual:function(t){ return entregaDe(t); },
+        rascunho:function(){ return state.entRascunho; }, gravar:function(k,v){ return gravarVersaoEntrega(k,v); }}
+};
+function celulaVersao(cls, t, campo){
+  var C = CAMPO_VERSAO[campo];
+  return '<span class="'+cls+(hgGravaJira() && C.rascunho()[t.key] !== undefined ? " pendente" : "")+'" title="'+C.rot+' no Jira'
+    + (hgGravaJira() ? " — mudar aqui grava lá" : " (gravação desligada — ligue em Versão grava no Jira, na aba Homologação)")+'">'
+    + opcoesVersaoLinha(t, campo)+'</span>';
+}
+function opcoesVersaoLinha(t, campo){
+  campo = campo || "corr";
+  var C = CAMPO_VERSAO[campo];
+  var atual = C.atual(t);
   var alvo = atual.length ? atual[atual.length-1] : "";
   if(!hgGravaJira()){
     return '<span class="cel-faint">'+esc(alvo || "—")+'</span>';
   }
-  var r = state.hgRascunho[t.key];
+  var r = C.rascunho()[t.key];
   if(r !== undefined) alvo = (r === HG_SEM) ? "" : r;
   function opt(v){ return '<option value="'+esc(v)+'"'+(v === alvo ? " selected" : "")+'>'+esc(v)+'</option>'; }
   var futuras = versoesNaoLancadas();
@@ -3437,10 +3546,10 @@ function opcoesVersaoLinha(t){
     ? '<optgroup label="Não lançadas no Jira">'+futuras.map(opt).join("")+'</optgroup>'
       + '<optgroup label="Lançadas / nas tarefas">'+vs.map(opt).join("")+'</optgroup>'
     : vs.map(opt).join("");
-  return '<select data-versao="1"'+(state.hgGravando ? " disabled" : "")
+  return '<select data-versao="'+campo+'"'+(state.hgGravando ? " disabled" : "")
     + ' title="'+(r !== undefined
         ? "Ainda NÃO gravado — no Jira está "+esc(atual.length ? atual.join(", ") : "sem versão")+". Use Aplicar no Jira."
-        : "Escolha a nova versão corrigida; só vai para o Jira quando você clicar em Aplicar")+'">'
+        : "Escolha a nova "+C.nome+"; só vai para o Jira quando você clicar em Aplicar")+'">'
     + '<option value="'+HG_SEM+'"'+(alvo ? "" : " selected")+'>— sem versão —</option>'
     + opts
     + '</select>';
@@ -3499,9 +3608,8 @@ function linhaHomolog(t){
     + '<span class="cl-status">'+etiquetaStatus(t.status)+'</span>'
     + '<span class="hg-testes cel-faint" title="'+esc(t.testAnalyst||"")+'">'+esc(t.testAnalyst||SEM_PESSOA)+'</span>'
     + '<span class="hg-est cel-faint">'+esc(t.estimativa||"")+'</span>'
-    + '<span class="hg-versao'+(hgGravaJira() && state.hgRascunho[t.key] !== undefined ? " pendente" : "")+'" title="Versões corrigidas no Jira'
-    +   (hgGravaJira() ? " — mudar aqui grava lá" : " (gravação desligada)")+'">'
-    +   opcoesVersaoLinha(t)+'</span>'
+    + celulaVersao("hg-versao", t, "corr")
+    + celulaVersao("hg-entrega", t, "ent")
     + celulaFase(t, prox)
     + '<span class="cl-updated cel-faint'+mp.cls+'" title="'+esc(mp.titulo)+'">'
     +   mp.icone+fmtData(t.prazo)+'</span>'
@@ -3528,16 +3636,10 @@ function renderHomolog(){
   /* O seletor de versão sai dos dados: não dá para pedir um release que não
      está na fila. A contagem em cada opção é do recorte cheio, sem o filtro de
      status nem a busca — é ela que diz onde ainda há trabalho. */
-  var porVersao = {};
-  d.todas.forEach(function(t){
-    var v = hgVersaoDe(t);
-    porVersao[v] = (porVersao[v] || 0) + 1;
-  });
-  if(state.hgVersao && porVersao[state.hgVersao] === undefined) state.hgVersao = "";
-  el["sel-hg-versao"].innerHTML = '<option value="">Todas as versões ('+d.todas.length+')</option>'
-    + hgOrdemVersoes(Object.keys(porVersao)).map(function(v){
-        return '<option value="'+esc(v)+'">'+esc(hgRotuloVersao(v))+' ('+porVersao[v]+')</option>';
-      }).join("");
+  var oRec = opcoesRecorte(d.todas);
+  state.hgVersao = normRecorte(state.hgVersao);
+  if(state.hgVersao && !oRec.valido(state.hgVersao)) state.hgVersao = "";
+  el["sel-hg-versao"].innerHTML = oRec.html;
   el["sel-hg-versao"].value = state.hgVersao;
 
   /* O status também sai dos dados, e não de STATUS_HOMOLOG: uma tarefa posta
@@ -3647,8 +3749,9 @@ function ligarLinhasHomolog(){
        (e uma recarga geral) por letra digitada. */
     var inp = row.querySelector("[data-obs]");
     if(inp) inp.onchange = function(){ salvarObsHomolog(key, inp.value); };
-    var sel = row.querySelector("[data-versao]");
-    if(sel) sel.onchange = function(){ marcarRascunho(key, sel.value); };
+    row.querySelectorAll("[data-versao]").forEach(function(sel){
+      sel.onchange = function(){ marcarRascunho(key, sel.value, sel.getAttribute("data-versao")); };
+    });
     var btTirar = row.querySelector("[data-tirar]");
     if(btTirar) btTirar.onclick = function(){ removerDaFila(key); };
     var btVoltar = row.querySelector("[data-voltar]");
@@ -3718,6 +3821,11 @@ function confirmarAcao(titulo, texto, rotuloSim, aoSim){
 function gravarVersoesCorrigidas(key, versoes){
   return window.nimitz.request("/api/fix-versions", {key:key, versions:versoes});
 }
+/* Autorizada em 17/11/2026 (ver o comentário do topo). Rota própria no Worker,
+   que só aceita este campo. */
+function gravarVersaoEntrega(key, versoes){
+  return window.nimitz.request("/api/delivery-versions", {key:key, versions:versoes});
+}
 var LS_RASCUNHO = window.nimitz.storagePrefix+"hgRascunho";
 var LS_VERSOES_JIRA = window.nimitz.storagePrefix+"versoesJira";
 
@@ -3760,13 +3868,30 @@ function versoesNaoLancadas(){
     }).map(function(v){ return v.name; });
 }
 function salvarRascunho(){
-  try{ sessionStorage.setItem(LS_RASCUNHO, JSON.stringify(state.hgRascunho)); }catch(e){}
+  try{
+    sessionStorage.setItem(LS_RASCUNHO, JSON.stringify(state.hgRascunho));
+    sessionStorage.setItem(LS_RASCUNHO+"-ent", JSON.stringify(state.entRascunho));
+  }catch(e){}
 }
 function carregarRascunho(){
   try{
     var r = JSON.parse(sessionStorage.getItem(LS_RASCUNHO) || "{}");
     if(r && typeof r === "object" && !Array.isArray(r)) state.hgRascunho = r;
+    var e2 = JSON.parse(sessionStorage.getItem(LS_RASCUNHO+"-ent") || "{}");
+    if(e2 && typeof e2 === "object" && !Array.isArray(e2)) state.entRascunho = e2;
   }catch(e){}
+}
+/* Todas as pendências dos dois campos, em ordem de chave. */
+function itensRascunho(){
+  var itens = [];
+  Object.keys(CAMPO_VERSAO).forEach(function(campo){
+    var C = CAMPO_VERSAO[campo], mapa = C.rascunho();
+    Object.keys(mapa).forEach(function(k){
+      var t = tarefaPorChave(k);
+      itens.push({key:k, t:t, campo:campo, de:textoVersoes(t ? C.atual(t) : []), novas:novasDoValor(mapa[k])});
+    });
+  });
+  return itens.sort(function(a,b){ return a.key < b.key ? -1 : a.key > b.key ? 1 : (a.campo < b.campo ? -1 : 1); });
 }
 function novasDoValor(valor){ return (valor === HG_SEM || !valor) ? [] : [valor]; }
 function textoVersoes(l){ return l.length ? l.join(", ") : "sem versão"; }
@@ -3774,24 +3899,29 @@ function textoVersoes(l){ return l.length ? l.join(", ") : "sem versão"; }
    trouxe) não é mais pendência; tarefa que sumiu do pacote também não. */
 function podarRascunho(){
   var mudou = false;
-  Object.keys(state.hgRascunho).forEach(function(k){
-    var t = tarefaPorChave(k);
-    if(!t || textoVersoes(corrigidasDe(t)) === textoVersoes(novasDoValor(state.hgRascunho[k]))){
-      delete state.hgRascunho[k]; mudou = true;
-    }
+  Object.keys(CAMPO_VERSAO).forEach(function(campo){
+    var C = CAMPO_VERSAO[campo], mapa = C.rascunho();
+    Object.keys(mapa).forEach(function(k){
+      var t = tarefaPorChave(k);
+      if(!t || textoVersoes(C.atual(t)) === textoVersoes(novasDoValor(mapa[k]))){
+        delete mapa[k]; mudou = true;
+      }
+    });
   });
   if(mudou) salvarRascunho();
 }
-function marcarRascunho(key, valor){
+function marcarRascunho(key, valor, campo){
   var t = tarefaPorChave(key);
   if(!t) return;
-  if(textoVersoes(corrigidasDe(t)) === textoVersoes(novasDoValor(valor))) delete state.hgRascunho[key];
-  else state.hgRascunho[key] = valor;
+  var C = CAMPO_VERSAO[campo] || CAMPO_VERSAO.corr, mapa = C.rascunho();
+  if(textoVersoes(C.atual(t)) === textoVersoes(novasDoValor(valor))) delete mapa[key];
+  else mapa[key] = valor;
   salvarRascunho();
   renderVersaoAbas();
 }
 function descartarRascunho(){
   state.hgRascunho = {};
+  state.entRascunho = {};
   salvarRascunho();
   renderVersaoAbas();
 }
@@ -3806,7 +3936,7 @@ function renderLote(){
 function preencherLote(p, visiveisDe){
   if(!el[p+"-lote"]) return;
   podarRascunho();
-  var ks = Object.keys(state.hgRascunho);
+  var ks = itensRascunho().map(function(i){ return i.key; });
   var mostra = hgGravaJira() && ks.length > 0;
   el[p+"-lote"].classList.toggle("hidden", !mostra);
   if(!mostra) return;
@@ -3828,15 +3958,13 @@ function aplicarRascunho(){
   }
   if(state.hgGravando || state.carregando) return;
   podarRascunho();
-  var itens = Object.keys(state.hgRascunho).sort().map(function(k){
-    var t = tarefaPorChave(k);
-    return {key:k, t:t, de:textoVersoes(corrigidasDe(t)), novas:novasDoValor(state.hgRascunho[k])};
-  });
+  var itens = itensRascunho().filter(function(i){ return i.t; });
   if(!itens.length){ renderVersaoAbas(); return; }
   confirmarAcao("Gravar "+itens.length+" versão(ões) no Jira",
-    'Versões corrigidas de <b>'+itens.length+'</b> tarefa(s):'
+    '<b>'+itens.length+'</b> alteração(ões) de versão:'
     + '<div class="lote-lista">' + itens.map(function(i){
-        return '<div title="'+esc(i.t.summary||"")+'"><b>'+esc(i.key)+'</b>  '+esc(i.de)+' → <b>'+esc(textoVersoes(i.novas))+'</b></div>';
+        return '<div title="'+esc(i.t.summary||"")+'"><b>'+esc(i.key)+'</b>  '+CAMPO_VERSAO[i.campo].rot+': '
+          + esc(i.de)+' → <b>'+esc(textoVersoes(i.novas))+'</b></div>';
       }).join("") + '</div><br>'
     + '<span style="color:var(--text-faint);">Isto altera as tarefas no Jira para todo mundo, '
     + 'e o painel não guarda os valores anteriores para desfazer.</span>',
@@ -3854,11 +3982,11 @@ function gravarLote(itens){
   function proximo(i){
     if(i >= itens.length) return terminar();
     var it = itens[i];
-    avisar("info","Gravando as Versões corrigidas no Jira… "+(i+1)+" de "+itens.length+" ("+it.key+")");
-    gravarVersoesCorrigidas(it.key, it.novas).then(function(){
+    avisar("info","Gravando as versões no Jira… "+(i+1)+" de "+itens.length+" ("+it.key+", "+CAMPO_VERSAO[it.campo].rot+")");
+    CAMPO_VERSAO[it.campo].gravar(it.key, it.novas).then(function(){
       oks.push(it);
     }).catch(function(err){
-      erros.push({key:it.key, msg:msgErro(err)});
+      erros.push({key:it.key+" ("+CAMPO_VERSAO[it.campo].rot+")", msg:msgErro(err)});
     }).then(function(){ proximo(i+1); });
   }
   function terminar(){
@@ -3868,7 +3996,9 @@ function gravarLote(itens){
       renderTudo(); return;
     }
     /* Relê só as gravadas: quem diz o que ficou é o Jira, não o que foi pedido. */
-    var chaves = oks.map(function(i){ return '"'+i.key+'"'; }).join(",");
+    var vistas = {};
+    var chaves = oks.filter(function(i){ if(vistas[i.key]) return false; vistas[i.key] = 1; return true; })
+      .map(function(i){ return '"'+i.key+'"'; }).join(",");
     carregarPorJql('project = '+PROJETO+' AND key in ('+chaves+')',
       "as tarefas depois da gravação", function(lista){
       if(lista.length){ mesclar(lista); salvar(); inicializarCheck(); }
@@ -3876,7 +4006,7 @@ function gravarLote(itens){
          abas Tarefas e Versões. Gravado o campo no Jira, ele só esconderia o
          valor novo — então sai, e só das tarefas que de fato gravaram. */
       var ajustes = state.check.versaoAjuste || {};
-      var semAjuste = oks.filter(function(it){ return ajustes[it.key] !== undefined; })
+      var semAjuste = oks.filter(function(it){ return it.campo === "corr" && ajustes[it.key] !== undefined; })
         .map(function(it){ return it.key; });
       if(semAjuste.length){
         atualizarCheck(function(c){
@@ -3889,9 +4019,10 @@ function gravarLote(itens){
       oks.forEach(function(it){
         var para = textoVersoes(it.novas);
         var t = tarefaPorChave(it.key);
-        var agora = t ? textoVersoes(corrigidasDe(t)) : "";
-        if(agora !== para) diferentes.push(it.key+" ficou "+(agora||"?")+" e não "+para);
-        delete state.hgRascunho[it.key];
+        var C = CAMPO_VERSAO[it.campo];
+        var agora = t ? textoVersoes(C.atual(t)) : "";
+        if(agora !== para) diferentes.push(it.key+" ("+C.rot+") ficou "+(agora||"?")+" e não "+para);
+        delete C.rascunho()[it.key];
       });
       salvarRascunho();
       var partes = [oks.length+" versão(ões) gravada(s) no Jira"];
@@ -3918,7 +4049,7 @@ function adicionarNaFila(key){
      sozinha: pôr na fila é decisão daqui, gravar no Jira é ação de fora e
      precisa de confirmação. Então, em vez de forçar um ajuste local que a
      coluna nem leria mais, avisa que a tarefa ficou fora do recorte na tela. */
-  var foraDoRecorte = !!versao && hgVersaoDe(t) !== versao;
+  var foraDoRecorte = !!versao && !casaRecorte(t, versao);
   /* Adicionar é dizer "esta entra NESTA rodada", venha do status que vier: a
      tarefa vai para a versão atual, e com marca quando o status a mandaria para
      a próxima — senão ela cairia direto no bloco do pé da lista, fora da tela de
@@ -4006,7 +4137,7 @@ function hgCandidatas(){
 }
 function renderHgAddCab(){
   el["hg-add-cab"].innerHTML = 'Põe na fila de homologação, na <b>versão atual</b>, uma tarefa de qualquer status'
-    + (state.hgVersao ? ' — ela entra na versão <b>'+esc(hgRotuloVersao(state.hgVersao))+'</b>' : "")
+    + (state.hgVersao ? ' — o recorte na tela é <b>'+esc(rotuloRecorte(state.hgVersao))+'</b>' : "")
     + '. Sem nada digitado a lista mostra o que está em teste; digite para procurar em todo o projeto.';
 }
 function renderHgAddLista(){
@@ -4079,13 +4210,10 @@ function renderChecklistAll(){
 function renderClVersao(){
   if(!el["sel-cl-versao"]) return;
   var base = clDerivados().noFiltro;
-  var porVersao = {};
-  base.forEach(function(t){ var v = hgVersaoDe(t); porVersao[v] = (porVersao[v] || 0) + 1; });
-  if(state.clVersao && porVersao[state.clVersao] === undefined) state.clVersao = "";
-  el["sel-cl-versao"].innerHTML = '<option value="">Todas as versões ('+base.length+')</option>'
-    + hgOrdemVersoes(Object.keys(porVersao)).map(function(v){
-        return '<option value="'+esc(v)+'">'+esc(hgRotuloVersao(v))+' ('+porVersao[v]+')</option>';
-      }).join("");
+  var o = opcoesRecorte(base);
+  state.clVersao = normRecorte(state.clVersao);
+  if(state.clVersao && !o.valido(state.clVersao)) state.clVersao = "";
+  el["sel-cl-versao"].innerHTML = o.html;
   el["sel-cl-versao"].value = state.clVersao;
   var dmp = clDerivados();
   el["ct-cl-mp"].textContent = dmp.qtdMP;
@@ -4389,20 +4517,21 @@ var GRADE_NATIVAS = {
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
     {id:"squad", rot:"Squad", sel:".cl-squad"}, {id:"cliente", rot:"Cliente", sel:".cl-cliente"},
     {id:"priority", rot:"Prioridade", sel:".cl-prio"},
-    {id:"versao", rot:"Versões corrigidas", sel:".cl-versao"},
+    {id:"versao", rot:"Versões corrigidas", sel:".cl-versao"}, {id:"entrega", rot:"Versão entrega", sel:".cl-entrega"},
     {id:"prazo", rot:"Entrega", sel:".cl-updated"}
   ],
   homolog: [
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
     {id:"testAnalyst", rot:"Analista de testes", sel:".hg-testes,.hg-c-testes"}, {id:"estimativa", rot:"Estimativa de testes", sel:".hg-est,.hg-c-est"},
-    {id:"versao", rot:"Versões corrigidas", sel:".hg-versao,.hg-c-versao"}, {id:"prazo", rot:"Entrega", sel:".cl-updated"},
+    {id:"versao", rot:"Versões corrigidas", sel:".hg-versao,.hg-c-versao"},
+    {id:"entrega", rot:"Versão entrega", sel:".hg-entrega,.hg-c-entrega"}, {id:"prazo", rot:"Entrega", sel:".cl-updated"},
     {id:"obs", rot:"Observação", sel:".hg-obs,.hg-c-obs"}
   ]
 };
 /* Campos do catálogo que já aparecem como coluna própria da grade. */
 var GRADE_JA_TEM = {
-  checklist: {key:1, summary:1, type:1, status:1, squad:1, cliente:1, priority:1, prazo:1, versoes:1},
-  homolog:   {key:1, summary:1, type:1, status:1, testAnalyst:1, estimativa:1, prazo:1, versoes:1}
+  checklist: {key:1, summary:1, type:1, status:1, squad:1, cliente:1, priority:1, prazo:1, versoes:1, versaoEntrega:1},
+  homolog:   {key:1, summary:1, type:1, status:1, testAnalyst:1, estimativa:1, prazo:1, versoes:1, versaoEntrega:1}
 };
 var GRADE_PAINEL = {checklist:"#painel-checklist", homolog:"#painel-homolog"};
 var GRADE_LINHA = {checklist:[".cl-cols",".cl-row"], homolog:[".hg-cols",".hg-row"]};
@@ -4476,8 +4605,8 @@ function redesenharGrades(){
    escolha de colunas (navegador e conta). Coluna que não está na lista vai
    para o fim, na ordem padrão. */
 var GRADE_PADRAO_ORDEM = {
-  checklist:["type","status","squad","cliente","priority","versao","prazo"],
-  homolog:["type","status","testAnalyst","estimativa","versao","fase","prazo","obs"]
+  checklist:["type","status","squad","cliente","priority","versao","entrega","prazo"],
+  homolog:["type","status","testAnalyst","estimativa","versao","entrega","fase","prazo","obs"]
 };
 var GRADE_FASE_SEL = [".hg-c-fase",".hg-fase"];
 var GRADE_FIM = {checklist:[".cl-c-act",".cl-dismiss"], homolog:[".hg-c-act",".hg-act"]};
@@ -4607,8 +4736,9 @@ function aplicarCssColunas(){
      extra soma a sua largura (e o espaço entre colunas); sem isso o fundo da
      linha acaba antes das últimas células. */
   /* Checklist: 1220 + Posição (52) + Semana (52) + Versões corrigidas mais
-     larga (+20) = 1344, e as duas colunas novas somam dois espaços. */
-  var BASE_GRADE = {checklist:1344, homolog:1660}, GAPS_BASE = {checklist:2, homolog:0};
+     larga (+20) + Versão entrega (132) = 1476, com três espaços a mais.
+     Homologação: 1660 + Versão entrega (132), um espaço a mais. */
+  var BASE_GRADE = {checklist:1476, homolog:1792}, GAPS_BASE = {checklist:3, homolog:1};
   ["checklist","homolog"].forEach(function(g){
     var ex = extrasDaGrade(g), soma = 0;
     ex.forEach(function(c){ soma += c.w; });
