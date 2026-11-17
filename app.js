@@ -2742,6 +2742,8 @@ function renderRevivePill(){
 var CL_COLUNAS = [
   {cls:"cl-c-grip",  rot:""},
   {cls:"cl-c-pos",   rot:"Posição"},
+  /* Fixa entre Posição e Chave: não arrasta nem esconde. */
+  {cls:"cl-c-sem",   rot:"Semana"},
   {cls:"cl-c-key",   rot:"Chave",      ord:"key"},
   {cls:"cl-summary", rot:"Resumo",     ord:"summary"},
   {cls:"cl-type",    rot:"Tipo",       ord:"type"},
@@ -2751,7 +2753,6 @@ var CL_COLUNAS = [
   {cls:"cl-prio",    rot:"Prioridade", ord:"priority"},
   {cls:"cl-versao",  rot:"Versões corrigidas", ord:"versao"},
   {cls:"cl-updated", rot:"Entrega",    ord:"prazo"},
-  {cls:"cl-c-sem",   rot:"Semana"},
   {cls:"cl-c-act",   rot:""}
 ];
 /* Três estados, como na Homologação: crescente, decrescente e NENHUM. Sem o
@@ -2879,6 +2880,7 @@ function renderClList(){
       + '<span class="cl-stripe" style="'+faixa+'"></span>'
       + '<span class="grip">'+icon("grip",14)+'</span>'
       + celPos
+      + celSem
       + '<span class="ponto-key-cell"><a class="cl-key mono" style="'+risco+'" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
       + '<span class="cl-summary"><span class="txt" style="'+risco+'">'+esc(t.summary)+'</span>'
       +   (voltou?'<span class="chip-mini chip-voltou">Voltou</span>':"")
@@ -2898,7 +2900,6 @@ function renderClList(){
       +   opcoesVersaoLinha(t)+'</span>'
       + '<span class="cl-updated cel-faint'+mp.cls+'" title="'+esc(mp.titulo)+'">'+mp.icone+fmtData(t.prazo)+'</span>'
       + celulasExtras("checklist", t)
-      + celSem
       + '<button class="cl-dismiss" data-act="dispensa"'+(t.impedida?' disabled style="opacity:.35;cursor:default;"':'')
       +   ' title="'+(t.impedida ? "O impedimento está marcado no Jira; tire de lá para voltar à fila"
                      : estado==="dispensada" ? "Trazer de volta para a lista ativa (só para você)"
@@ -4381,7 +4382,7 @@ var GRADE_NATIVAS = {
   checklist: [
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
     {id:"squad", rot:"Squad", sel:".cl-squad"}, {id:"cliente", rot:"Cliente", sel:".cl-cliente"},
-    {id:"priority", rot:"Prioridade", sel:".cl-prio"}, {id:"semana", rot:"Semana", sel:".cl-sem,.cl-c-sem"},
+    {id:"priority", rot:"Prioridade", sel:".cl-prio"},
     {id:"versao", rot:"Versões corrigidas", sel:".cl-versao"},
     {id:"prazo", rot:"Entrega", sel:".cl-updated"}
   ],
@@ -4469,7 +4470,7 @@ function redesenharGrades(){
    escolha de colunas (navegador e conta). Coluna que não está na lista vai
    para o fim, na ordem padrão. */
 var GRADE_PADRAO_ORDEM = {
-  checklist:["type","status","squad","cliente","priority","semana","versao","prazo"],
+  checklist:["type","status","squad","cliente","priority","versao","prazo"],
   homolog:["type","status","testAnalyst","estimativa","versao","fase","prazo","obs"]
 };
 var GRADE_FASE_SEL = [".hg-c-fase",".hg-fase"];
