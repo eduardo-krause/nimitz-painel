@@ -3526,7 +3526,11 @@ var RECENTES_VERSAO = 10;
 var VERSOES_AJUSTE_CACHE = null;
 function versoesBaseAjuste(){
   var c = VERSOES_AJUSTE_CACHE;
-  if(c && c.t === state.tarefas && c.c === state.check && c.j === state.versoesJira) return c.v;
+  /* Do check só importam o ajuste de versão e quem foi posto/tirado da fila:
+     mexer na semana ou na ordem troca o check, mas não estes três objetos. */
+  var k = state.check || {};
+  if(c && c.t === state.tarefas && c.a === k.versaoAjuste && c.x === k.hgExtra && c.f === k.hgFora
+     && c.j === state.versoesJira) return c.v;
   var s = {};
   tarefasHomolog().forEach(function(t){
     corrigidasDe(t).forEach(function(v){ s[v] = true; });
@@ -3536,7 +3540,7 @@ function versoesBaseAjuste(){
      Jira recusa o que não existir. */
   versoesPresentes().slice(0, RECENTES_VERSAO).forEach(function(v){ s[v] = true; });
   var v = {base:Object.keys(s).sort(function(a,b){ return b.localeCompare(a,"pt-BR"); }), futuras:versoesNaoLancadas()};
-  VERSOES_AJUSTE_CACHE = {t:state.tarefas, c:state.check, j:state.versoesJira, v:v};
+  VERSOES_AJUSTE_CACHE = {t:state.tarefas, a:k.versaoAjuste, x:k.hgExtra, f:k.hgFora, j:state.versoesJira, v:v};
   return v;
 }
 function versoesParaAjuste(atual){

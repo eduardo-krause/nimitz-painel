@@ -172,7 +172,7 @@ if (preview && local) {
   $('connection-status').textContent = 'Sem conexão · configure o Jira para carregar tarefas';
 }
 const script = document.createElement('script');
-script.src = './app.js?v=20261117i';
+script.src = './app.js?v=20261117j';
 script.onload = () => {
   const button = $('connection-open');
   document.querySelector('#app .topbar').appendChild(button);
@@ -263,7 +263,7 @@ state.setPontoActive=active=>{
   if(active&&!pontoFrame){
     const panel=$('painel-ponto');if(!panel)return;
     pontoFrame=document.createElement('iframe');pontoFrame.title='Registro';
-    pontoFrame.src='./ponto.html?v=20261117i';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
+    pontoFrame.src='./ponto.html?v=20261117j';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
     panel.appendChild(pontoFrame);
   }
 };
@@ -310,7 +310,7 @@ function initializePonto(){
    aberto recarrega sozinho (com a aba escondida, ou sem ninguém digitando),
    sem depender de Ctrl+F5. O número abaixo muda a cada publicação, junto com
    o ?v= dos scripts e o versao.txt. */
-const VERSAO_PAINEL = '20261117i';
+const VERSAO_PAINEL = '20261117j';
 function digitandoAgora(){
   const quem = d => { const a = d && d.activeElement; return !!a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
   if (quem(document)) return true;
