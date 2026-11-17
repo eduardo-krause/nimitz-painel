@@ -357,8 +357,8 @@ var CHECK_VAZIO = {
   versaoAjuste:{},
   /* Checklist: blocos "Esta semana para testar" x "Demais tarefas". O padrão vem
      da Entrega (riscoPrazo); as marcas só existem para a tarefa movida CONTRA o
-     padrão (chave -> data ISO), como hgProx/hgAtual na Homologação. Ficam neste
-     navegador: a Checklist é a lista de cada pessoa. */
+     padrão (chave -> data ISO), como hgProx/hgAtual na Homologação. Desde
+     17/11/2026 valem para a equipe (HG_TIME), como as da Homologação. */
   clSemana:{}, clDemais:{},
   /* Checklist: esconde de uma vez o bloco Concluídas. */
   clOcultaMP:false
@@ -601,7 +601,11 @@ function atualizarCheck(patch){
    valem para a equipe inteira: ficam no Worker, não só neste navegador. Cada
    mudança vai como operação (campo, tarefa, valor) e o Worker aplica sobre a
    versão atual — duas pessoas marcando juntas não apagam a marca da outra. */
-var HG_TIME = ["homolog","homologObs","hgExtra","hgFora","hgProx","hgAtual"];
+/* clSemana/clDemais desde 17/11/2026: quem está em "Esta semana para testar"
+   na Checklist é decisão da equipe, e todo mundo tem que ver o mesmo. */
+var HG_TIME = ["homolog","homologObs","hgExtra","hgFora","hgProx","hgAtual","clSemana","clDemais"];
+var HG_TIME_SEMANA = ["clSemana","clDemais"];
+var LS_HG_SEMEADO_SEMANA = window.nimitz.storagePrefix+"homolog-time-semeado-semana";
 var HG_CONSULTA = 20000;
 var LS_HG_SEMEADO = window.nimitz.storagePrefix+"homolog-time-semeado";
 var LS_HG_FILA = window.nimitz.storagePrefix+"homolog-time-fila";
@@ -678,6 +682,7 @@ function hgTimeRender(){
   if(editandoAgora()){ HGT.renderPendente = true; return; }
   HGT.renderPendente = false;
   if(state.aba === "homolog") renderHomolog();
+  if(state.aba === "checklist") renderChecklistAll();
   renderTopo();
 }
 function hgTimeConsultar(){
@@ -699,6 +704,19 @@ function hgTimeConsultar(){
       });
       if(HGT.fila.length) hgTimeAgendar(0);
       else try{ localStorage.setItem(LS_HG_SEMEADO, "1"); }catch(e){}
+    }
+    /* A semana entrou no compartilhado depois: quem já tinha semeado a
+       Homologação ainda precisa mandar as marcas de semana que tem aqui
+       (só o que falta lá), senão a primeira leitura as apagaria. */
+    var semeouSemana = true; try{ semeouSemana = !!localStorage.getItem(LS_HG_SEMEADO_SEMANA); }catch(e){}
+    if(!semeouSemana){
+      var antes = HGT.fila.length;
+      HG_TIME_SEMANA.forEach(function(f){
+        var meu = state.check[f] || {}, dele = (r.data || {})[f] || {};
+        Object.keys(meu).forEach(function(k){ if(!(k in dele)) HGT.fila.push({f:f, k:k, v:meu[k]}); });
+      });
+      if(HGT.fila.length > antes){ hgFilaGuardar(); hgTimeAgendar(0); }
+      try{ localStorage.setItem(LS_HG_SEMEADO_SEMANA, "1"); }catch(e){}
     }
     hgTimeAdotar(r);
     if(!(HGT.status && HGT.status.erro && HGT.fila.length))
@@ -2986,9 +3004,9 @@ function renderClList(){
     var celSem = estado === "feita" ? '<span class="cl-sem"></span>'
       : '<span class="cl-sem">'+(naSemana
           ? '<button type="button" data-sem="demais" title="Passar para Demais tarefas'
-            + (clSemanaPorPrazo(t) ? " (a Entrega pede esta semana; fica marcado só neste navegador)" : "")+'">'+icon("arrowdown",15)+'</button>'
+            + (clSemanaPorPrazo(t) ? " (a Entrega pede esta semana; vale para a equipe)" : "")+'">'+icon("arrowdown",15)+'</button>'
           : '<button type="button" data-sem="semana" title="Trazer para Esta semana para testar'
-            + (clSemanaPorPrazo(t) ? "" : " (a Entrega não pede; fica marcado só neste navegador)")+'">'+icon("up",15)+'</button>')
+            + (clSemanaPorPrazo(t) ? "" : " (a Entrega não pede; vale para a equipe)")+'">'+icon("up",15)+'</button>')
         + '</span>';
     partes.push('<div class="cl-row '+rowCls+'" draggable="'+(podeArrastar?"true":"false")+'"'
       + ' title="'+(podeArrastar?"":"Para reordenar arrastando, mude a ordenação para “Ordem definida”")+'"'
