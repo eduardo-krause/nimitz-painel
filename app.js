@@ -2573,15 +2573,18 @@ function clNaSemana(t){
 }
 /* Grava a marca só quando o destino DISCORDA da Entrega; indo para onde a data
    já levaria, apaga a marca e a tarefa volta a seguir o padrão. */
-function clMoverSemana(key, paraSemana){
-  var t = tarefaPorChave(key); if(!t) return;
-  var padrao = clSemanaPorPrazo(t);
+function clMarcarSemana(t, paraSemana){
+  var key = t.key, padrao = clSemanaPorPrazo(t);
   atualizarCheck(function(c){
     var sem = Object.assign({}, c.clSemana), dem = Object.assign({}, c.clDemais);
     delete sem[key]; delete dem[key];
     if(paraSemana !== padrao) (paraSemana ? sem : dem)[key] = new Date().toISOString();
     return {clSemana:sem, clDemais:dem};
   });
+}
+function clMoverSemana(key, paraSemana){
+  var t = tarefaPorChave(key); if(!t) return;
+  clMarcarSemana(t, paraSemana);
   avisar("info", t.key + (paraSemana ? " entrou em Esta semana para testar." : " foi para Demais tarefas."));
   renderChecklistAll();
 }
@@ -2599,29 +2602,45 @@ function clGravarOrdem(seq){
   }
 }
 /* Posição digitada: conta as linhas ATIVAS da tela, de cima para baixo, como a
-   coluna de prioridade da planilha. A tarefa não troca de bloco por aqui —
-   para isso existe a seta da coluna Semana —, então o número fica preso ao
-   trecho do bloco dela. */
+   coluna de prioridade da planilha. O número também decide o BLOCO: uma tarefa
+   de Demais com número dentro de Esta semana entra na semana (o bloco cresce
+   de 10 para 11), e uma da semana com número além dela sai para Demais. O
+   número exatamente na divisa (semana + 1) não troca de bloco. */
+function clAtivasVisiveis(){
+  return clDerivados().visiveis.filter(function(t){ return estadoDe(t) !== "feita"; });
+}
 function clPosicionar(key, valor){
-  var ativas = clDerivados().visiveis.filter(function(t){ return estadoDe(t) !== "feita"; });
+  var ativas = clAtivasVisiveis();
   var keys = ativas.map(function(t){ return t.key; });
   var de = keys.indexOf(key);
   var n = parseInt(String(valor).trim(), 10);
   if(de === -1 || isNaN(n)){ renderClList(); return; }
+  n = Math.min(Math.max(n, 1), keys.length);
   var nSem = ativas.filter(clNaSemana).length;
-  var naSemana = clNaSemana(ativas[de]);
-  var ini = naSemana ? 0 : nSem, fim = naSemana ? nSem : keys.length;
-  var idx = Math.min(Math.max(n-1, ini), fim-1);
-  if(n-1 < ini || n-1 >= fim){
-    avisar("info", key + " está em " + (naSemana ? "Esta semana para testar" : "Demais tarefas")
-      + " e foi para a posição " + (idx+1) + ", a " + (n-1 < ini ? "primeira" : "última") + " desse bloco. Para trocar de bloco, use a seta da coluna Semana.");
+  var t = ativas[de];
+  var naSemana = clNaSemana(t);
+  var paraSemana = n <= nSem;
+  var trocou = paraSemana !== naSemana;
+  if(trocou){
+    clMarcarSemana(t, paraSemana);
+    ativas = clAtivasVisiveis();
+    keys = ativas.map(function(x){ return x.key; });
+    de = keys.indexOf(key);
+    nSem = ativas.filter(clNaSemana).length;
   }
-  if(idx === de){ renderClList(); return; }
+  var ini = paraSemana ? 0 : nSem, fim = paraSemana ? nSem : keys.length;
+  var idx = Math.min(Math.max(n-1, ini), fim-1);
+  if(trocou){
+    avisar("info", key + (paraSemana
+      ? " entrou em Esta semana para testar (versão de "+fmtDiaMes(janelaRelease().r1)+"), na posição "+(idx+1)+"."
+      : " saiu de Esta semana e foi para Demais tarefas, na posição "+(idx+1)+"."));
+  }
+  if(idx === de){ if(trocou) renderChecklistAll(); else renderClList(); return; }
   var alvo = keys[idx], depois = idx > de;
   var seq = ordenadasDaPessoa(state.pessoa).map(function(x){ return x.key; });
   seq.splice(seq.indexOf(key), 1);
   var pos = seq.indexOf(alvo);
-  if(pos === -1){ renderClList(); return; }
+  if(pos === -1){ renderChecklistAll(); return; }
   seq.splice(depois ? pos+1 : pos, 0, key);
   clGravarOrdem(seq);
 }
@@ -2962,7 +2981,7 @@ function renderClList(){
     if(estado !== "feita") posAtiva++;
     var celPos = estado === "feita" ? '<span class="cl-pos"></span>'
       : '<span class="cl-pos"><input type="text" inputmode="numeric" data-pos="1" value="'+posAtiva+'"'
-        + (podeArrastar ? ' title="Digite a posição e tecle Enter: 1 manda para o topo do bloco, 3 para a terceira linha… Vale para o time, como o arrastar."'
+        + (podeArrastar ? ' title="Digite a posição e tecle Enter: 1 manda para o topo, 3 para a terceira linha. Número dentro de Esta semana põe a tarefa na semana; além dela, em Demais. A ordem vale para o time."'
                         : ' disabled title="Para mudar a posição, deixe a ordenação em “Ordem definida” e sem ordenar por coluna"')+'></span>';
     var celSem = estado === "feita" ? '<span class="cl-sem"></span>'
       : '<span class="cl-sem">'+(naSemana
