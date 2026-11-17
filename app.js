@@ -4381,7 +4381,8 @@ var GRADE_NATIVAS = {
   checklist: [
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
     {id:"squad", rot:"Squad", sel:".cl-squad"}, {id:"cliente", rot:"Cliente", sel:".cl-cliente"},
-    {id:"priority", rot:"Prioridade", sel:".cl-prio"}, {id:"versao", rot:"Versões corrigidas", sel:".cl-versao"},
+    {id:"priority", rot:"Prioridade", sel:".cl-prio"}, {id:"semana", rot:"Semana", sel:".cl-sem,.cl-c-sem"},
+    {id:"versao", rot:"Versões corrigidas", sel:".cl-versao"},
     {id:"prazo", rot:"Entrega", sel:".cl-updated"}
   ],
   homolog: [
@@ -4468,15 +4469,24 @@ function redesenharGrades(){
    escolha de colunas (navegador e conta). Coluna que não está na lista vai
    para o fim, na ordem padrão. */
 var GRADE_PADRAO_ORDEM = {
-  checklist:["type","status","squad","cliente","priority","versao","prazo"],
+  checklist:["type","status","squad","cliente","priority","semana","versao","prazo"],
   homolog:["type","status","testAnalyst","estimativa","versao","fase","prazo","obs"]
 };
 var GRADE_FASE_SEL = [".hg-c-fase",".hg-fase"];
-var GRADE_FIM = {checklist:[".cl-c-sem",".cl-sem",".cl-c-act",".cl-dismiss"], homolog:[".hg-c-act",".hg-act"]};
+var GRADE_FIM = {checklist:[".cl-c-act",".cl-dismiss"], homolog:[".hg-c-act",".hg-act"]};
 function ordemDe(aba){ var o = state.colunas.ordem && state.colunas.ordem[aba]; return Array.isArray(o) ? o : []; }
 function ordenarColunas(aba, ids){
   var salvo = ordemDe(aba).filter(function(id){ return ids.indexOf(id) !== -1; });
-  return salvo.concat(ids.filter(function(id){ return salvo.indexOf(id) === -1; }));
+  /* Coluna que a ordem salva não conhece (ex.: Semana, que chegou depois) entra
+     logo depois da vizinha da ordem padrão, e não no fim da linha. */
+  var out = salvo.slice();
+  ids.forEach(function(id, i){
+    if(out.indexOf(id) !== -1) return;
+    var j = -1;
+    for(var k=i-1;k>=0 && j===-1;k--) j = out.indexOf(ids[k]);
+    out.splice(j+1, 0, id);
+  });
+  return out;
 }
 function moveisDaGrade(g){
   return GRADE_PADRAO_ORDEM[g].concat(extrasDaGrade(g).map(function(c){ return c.id; }));
@@ -4589,12 +4599,14 @@ function aplicarCssColunas(){
   /* A linha tem largura mínima fixa no CSS, pensada sem colunas extras. Cada
      extra soma a sua largura (e o espaço entre colunas); sem isso o fundo da
      linha acaba antes das últimas células. */
-  var BASE_GRADE = {checklist:1220, homolog:1660};
+  /* Checklist: 1220 + Posição (64) + Semana (64) + Versões corrigidas mais
+     larga (+20) = 1368, e as duas colunas novas somam dois espaços. */
+  var BASE_GRADE = {checklist:1368, homolog:1660}, GAPS_BASE = {checklist:2, homolog:0};
   ["checklist","homolog"].forEach(function(g){
     var ex = extrasDaGrade(g), soma = 0;
     ex.forEach(function(c){ soma += c.w; });
     var pre = g === "homolog" ? "#hg-" : "#cl-";
-    css += GRADE_PAINEL[g]+" "+pre+"rows,"+GRADE_PAINEL[g]+" "+pre+"cols{min-width:calc("+(BASE_GRADE[g]+soma)+"px + "+ex.length+" * var(--row-gap))}";
+    css += GRADE_PAINEL[g]+" "+pre+"rows,"+GRADE_PAINEL[g]+" "+pre+"cols{min-width:calc("+(BASE_GRADE[g]+soma)+"px + "+(ex.length+GAPS_BASE[g])+" * var(--row-gap))}";
   });
   var tag = document.getElementById("grade-colunas-css");
   if(!tag){ tag = document.createElement("style"); tag.id = "grade-colunas-css"; document.head.appendChild(tag); }
