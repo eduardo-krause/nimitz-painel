@@ -172,7 +172,7 @@ if (preview && local) {
   $('connection-status').textContent = 'Sem conexão · configure o Jira para carregar tarefas';
 }
 const script = document.createElement('script');
-script.src = './app.js?v=20261117e';
+script.src = './app.js?v=20261117f';
 script.onload = () => {
   const button = $('connection-open');
   document.querySelector('#app .topbar').appendChild(button);
@@ -212,7 +212,11 @@ function flashOrderStatus(message){
   clearTimeout(orderStatusTimer);
   orderStatusTimer=setTimeout(()=>showOrderStatus(''),5000);
 }
-state.canReorder = () => preview || (!!state.orderView && !!orders.get(state.orderView.person())?.ready && !orderSaving);
+// Gravar não bloqueia mais a tela: a ordem muda na hora (app.js) e a gravação
+// segue em segundo plano; trocas feitas durante uma gravação entram na fila.
+state.canReorder = () => preview || (!!state.orderView && !!orders.get(state.orderView.person())?.ready);
+let pendingSave=null;
+const sameKeys=(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&a.every((k,i)=>k===b[i]);
 state.refreshOrder = async (force=false) => {
   if(preview || !state.connected || !state.orderView || document.hidden || orderSaving || state.orderView.dragging()) return;
   const person=state.orderView.person();
@@ -235,18 +239,22 @@ state.refreshOrder = async (force=false) => {
 };
 state.saveOrder = async (person,keys) => {
   const entry=orders.get(person);
-  if(orderSaving || entry?.loading || !entry?.ready) throw new Error('Aguarde a sincronização da ordem antes de arrastar.');
+  if(entry?.loading || !entry?.ready) throw new Error('Aguarde a sincronização da ordem antes de arrastar.');
+  if(orderSaving){ pendingSave={person,keys}; return; }
   orderSaving=true; showOrderStatus('Salvando ordem para a equipe…');
   try {
     const data=await state.request('/api/order/save',{person,keys,revision:entry.revision});
     entry.revision=data.revision; entry.keys=data.keys; entry.last=Date.now();
-    state.orderView.apply(person,data.keys);
+    const next=pendingSave; pendingSave=null;
+    if(next){ orderSaving=false; return await state.saveOrder(next.person,next.keys); }
+    // Só redesenha se o servidor devolveu outra ordem: a tela já mostra a enviada.
+    if(!sameKeys(data.keys,keys)) state.orderView.apply(person,data.keys);
     flashOrderStatus('Ordem salva para a equipe');
   } catch(error) {
-    orderSaving=false;
+    orderSaving=false; pendingSave=null;
     await state.refreshOrder(true);
     throw error;
-  } finally { orderSaving=false; state.orderView.render(); }
+  } finally { orderSaving=false; }
 };
 
 let pontoFrame=null,pendingTask=null,pendingStop=false,activeTimer=null;
@@ -255,7 +263,7 @@ state.setPontoActive=active=>{
   if(active&&!pontoFrame){
     const panel=$('painel-ponto');if(!panel)return;
     pontoFrame=document.createElement('iframe');pontoFrame.title='Registro';
-    pontoFrame.src='./ponto.html?v=20261117e';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
+    pontoFrame.src='./ponto.html?v=20261117f';pontoFrame.style.cssText='width:100%;height:calc(100vh - 120px);min-height:570px;border:0;border-radius:0 0 12px 12px;background:transparent';
     panel.appendChild(pontoFrame);
   }
 };
@@ -302,7 +310,7 @@ function initializePonto(){
    aberto recarrega sozinho (com a aba escondida, ou sem ninguém digitando),
    sem depender de Ctrl+F5. O número abaixo muda a cada publicação, junto com
    o ?v= dos scripts e o versao.txt. */
-const VERSAO_PAINEL = '20261117e';
+const VERSAO_PAINEL = '20261117f';
 function digitandoAgora(){
   const quem = d => { const a = d && d.activeElement; return !!a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
   if (quem(document)) return true;

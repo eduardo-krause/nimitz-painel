@@ -2494,15 +2494,18 @@ function clMoverSemana(key, paraSemana){
   avisar("info", t.key + (paraSemana ? " entrou em Esta semana para testar." : " foi para Demais tarefas."));
   renderChecklistAll();
 }
+/* A tela muda NA HORA e a gravação vai depois, em segundo plano: esperar o
+   servidor para mover a linha fazia a lista parecer travada a cada número
+   digitado. Se a gravação falhar, o boot relê a ordem do time e redesenha. */
 function clGravarOrdem(seq){
-  if(!window.nimitz.preview){
-    window.nimitz.saveOrder(state.pessoa,seq).catch(function(err){ avisar("err",err.message); renderChecklistAll(); });
-    return;
-  }
+  var pessoa = state.pessoa;
   var ordem = Object.assign({}, state.check.ordem);
-  if(!seq.length) delete ordem[state.pessoa]; else ordem[state.pessoa]=seq;
+  if(!seq.length) delete ordem[pessoa]; else ordem[pessoa]=seq;
   atualizarCheck({ordem:ordem});
   renderChecklistAll();
+  if(!window.nimitz.preview){
+    window.nimitz.saveOrder(pessoa,seq).catch(function(err){ avisar("err",err.message); renderChecklistAll(); });
+  }
 }
 /* Posição digitada: conta as linhas ATIVAS da tela, de cima para baixo, como a
    coluna de prioridade da planilha. A tarefa não troca de bloco por aqui —
