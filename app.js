@@ -356,7 +356,7 @@ var CHECK_VAZIO = {
      padrão (chave -> data ISO), como hgProx/hgAtual na Homologação. Ficam neste
      navegador: a Checklist é a lista de cada pessoa. */
   clSemana:{}, clDemais:{},
-  /* Checklist: esconde de uma vez Pronto para Merge e Teste Produção. */
+  /* Checklist: esconde de uma vez o bloco Concluídas. */
   clOcultaMP:false
 };
 
@@ -1634,8 +1634,8 @@ function montarShell(){
   +       '<div class="pop wide hidden" id="pop-feito"><div class="pop-cab">Tarefas nestes status já entram como '
   +       'feitas e vão para o fim da lista, riscadas. Se você desmarcar na mão, sua escolha prevalece.</div>'
   +       '<div class="pop-lista" id="pop-feito-lista"></div></div></div>'
-  +     '<button class="btn" id="bt-cl-mp" title="Esconde ou mostra de uma vez as tarefas em Pronto para Merge e Teste Produção, sem desmarcar status por status">'
-  +       icon("eyeoff",14)+' Ocultar merge e produção <span class="contador" id="ct-cl-mp"></span></button>'
+  +     '<button class="btn" id="bt-cl-mp" title="Esconde ou mostra de uma vez o bloco Concluídas (Pronto para Merge, Teste Produção e os demais status de Já testada), sem desmarcar status por status">'
+  +       icon("eyeoff",14)+' Ocultar concluídas <span class="contador" id="ct-cl-mp"></span></button>'
   +     botaoColunas("checklist")
   +     '<div class="toolbar-dir" id="cl-toolbar-dir">'
   +       '<select id="sel-ordenacao" class="sel-inline" title="Como ordenar a lista. '
@@ -2480,7 +2480,6 @@ function clNaSemana(t){
   if((state.check.clDemais || {})[t.key]) return false;
   return clSemanaPorPrazo(t);
 }
-function clEhMergeProd(t){ var f = faseDe(t); return f === "merge" || f === "prod"; }
 /* Grava a marca só quando o destino DISCORDA da Entrega; indo para onde a data
    já levaria, apaga a marca e a tarefa volta a seguir o padrão. */
 function clMoverSemana(key, paraSemana){
@@ -2562,9 +2561,11 @@ function clDerivadosCalc(){
   });
   var statusDaPessoa = Array.from(contS.entries()).map(function(e){ return {status:e[0], qtd:e[1], fim:fimS.get(e[0])}; })
     .sort(function(a,b){ return (a.fim?1:0)-(b.fim?1:0) || a.status.localeCompare(b.status,"pt-BR"); });
-  var qtdMP = daPessoa.filter(clEhMergeProd).length;
+  var qtdMP = daPessoa.filter(function(t){
+    return !ocultosSet.has(t.status||SEM_STATUS) && estadoDe(t) === "feita";
+  }).length;
   var noFiltro = daPessoa.filter(function(t){
-    if(state.check.clOcultaMP && clEhMergeProd(t)) return false;
+    if(state.check.clOcultaMP && estadoDe(t) === "feita") return false;
     return !ocultosSet.has(t.status||SEM_STATUS);
   });
   var q = norm(state.clBusca);
@@ -2574,7 +2575,9 @@ function clDerivadosCalc(){
     return true;
   });
   var resumo = {teste:0,dispensada:0,feita:0};
-  noFiltro.forEach(function(t){ resumo[estadoDe(t)]++; });
+  /* O progresso conta as concluídas mesmo com elas escondidas: esconder é só
+     tirar da frente, não desfazer o trabalho. */
+  daPessoa.forEach(function(t){ if(!ocultosSet.has(t.status||SEM_STATUS)) resumo[estadoDe(t)]++; });
   var qtdRevividas = noFiltro.filter(function(t){ return state.check.revividas[t.key]; }).length;
   return {daPessoa:daPessoa, statusDaPessoa:statusDaPessoa, noFiltro:noFiltro, visiveis:visiveis,
           resumo:resumo, qtdRevividas:qtdRevividas, qtdMP:qtdMP};
