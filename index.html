@@ -320,6 +320,9 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
 .busca svg{color:var(--text-faint);}
 .busca input{border:0;background:transparent;outline:0;font-size:var(--fs-sm);color:var(--text);width:200px;}
 .busca input::placeholder{color:var(--text-faint);}
+/* Na Checklist a barra ganhou o recorte de versão e o botão de merge/produção:
+   com a busca mais curta tudo cabe numa linha a partir de 1440px. */
+#painel-checklist .busca input{width:120px;}
 .sel-inline{border:1px solid var(--border);background:var(--surface);border-radius:var(--r-md);
   padding:0 var(--sp-2);height:var(--ctrl-h);font-size:var(--fs-sm);color:var(--text-muted);cursor:pointer;max-width:190px;}
 /* Menu cujo botão está escondido não ocupa lugar (nem o espaço do gap). */
@@ -478,7 +481,7 @@ tr:hover .chave svg{opacity:.6;}
   --row-gap:var(--sp-3);
   --accent-1-ink:#ffffff; --success-ink:#ffffff;
   --w-grip:16px; --w-key:88px; --w-type:80px; --w-status:152px;
-  --w-squad:96px; --w-cliente:144px; --w-prio:80px; --w-versao:112px;
+  --w-squad:96px; --w-cliente:144px; --w-prio:80px; --w-versao:132px;
   --w-entrega:72px; --w-act:26px; --w-summary-min:180px;
 }
 
@@ -540,6 +543,19 @@ tr:hover .chave svg{opacity:.6;}
 .cl-versao{width:var(--w-versao);flex:none;}
 .cl-updated{width:var(--w-entrega);flex:none;display:flex;align-items:center;gap:3px;}
 .cl-dismiss,.cl-c-act{width:var(--w-act);flex:none;}
+/* Posição digitada (como a coluna de prioridade da planilha) e a seta que troca
+   a tarefa entre Esta semana e Demais tarefas. */
+.cl-pos,.cl-c-pos{width:64px;flex:none;}
+.cl-pos input{width:44px;height:var(--ctrl-h-sm);border:1px solid var(--border);border-radius:var(--r-sm);
+  background:var(--surface);color:var(--text);text-align:center;font-family:var(--font-mono);font-size:var(--fs-xs);outline:0;}
+.cl-pos input:focus{border-color:var(--focus);}
+.cl-pos input:disabled{opacity:.45;cursor:not-allowed;}
+.cl-sem,.cl-c-sem{width:64px;flex:none;display:flex;align-items:center;justify-content:center;}
+.cl-sem button{display:flex;align-items:center;justify-content:center;width:26px;height:20px;padding:0;
+  border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-faint);cursor:pointer;}
+.cl-sem button:hover{background:var(--surface-3);color:var(--accent-2);}
+.cl-sem button svg{width:15px;height:15px;}
+.section-sep.sep-semana{color:var(--text);font-weight:600;}
 /* Estilo de TEXTO só dentro da linha, para não vazar no cabeçalho — é o que
    fazia cada rótulo de coluna sair num tamanho diferente no painel antigo. */
 .cl-row .cl-key{font-family:var(--font-mono);font-size:var(--fs-xs);font-weight:700;letter-spacing:-.01em;text-decoration:none;}
@@ -640,17 +656,17 @@ tr:hover .chave svg{opacity:.6;}
 /* O seletor de versão da linha. Sem cara de campo até o mouse chegar, como a
    observação: são 47 linhas, e 47 caixas desenhadas viram ruído. */
 .hg-versao,.hg-c-versao{width:132px;flex:none;}
-.hg-versao select{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
+.cl-versao select,.hg-versao select{width:100%;border:1px solid transparent;background:transparent;border-radius:var(--r-sm);
   height:var(--ctrl-h-sm);padding:0 var(--sp-1);font-family:inherit;font-size:var(--fs-sm);
   color:var(--text-faint);cursor:pointer;outline:0;}
-.hg-versao select:hover{border-color:var(--border);color:var(--text);}
-.hg-versao select:focus{border-color:var(--focus);background:var(--surface);color:var(--text);}
+.cl-versao select:hover,.hg-versao select:hover{border-color:var(--border);color:var(--text);}
+.cl-versao select:focus,.hg-versao select:focus{border-color:var(--focus);background:var(--surface);color:var(--text);}
 .hg-versao.ajustada select{color:var(--info-text);text-decoration:none;}
 .hg-versao.ajustada{text-decoration:none;}
 /* Versão escolhida e ainda não gravada: âmbar, como tudo que está "pendente"
    no painel. Fica no select, não na linha — o verde de .testada segue sendo o
    sinal que se procura descendo a fila. */
-.hg-versao.pendente select{background:var(--warn-bg);border-color:var(--warn-border);
+.cl-versao.pendente select,.hg-versao.pendente select{background:var(--warn-bg);border-color:var(--warn-border);
   color:var(--warn-text);font-weight:600;}
 .hg-lote{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--gutter);
   border-bottom:1px solid var(--warn-border);background:var(--warn-bg);color:var(--warn-text);
@@ -742,6 +758,6 @@ tr:hover .chave svg{opacity:.6;}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261116f"></script>
+<script type="module" src="./boot.js?v=20261117a"></script>
 </body>
 </html>

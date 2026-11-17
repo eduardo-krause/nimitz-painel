@@ -350,7 +350,14 @@ var CHECK_VAZIO = {
      nenhuma quem decide é o status. Ver a seção da aba, no fim do arquivo. */
   hgProx:{}, hgAtual:{},
   /* chave -> lista de versões, quando o time corrige o que veio do Jira */
-  versaoAjuste:{}
+  versaoAjuste:{},
+  /* Checklist: blocos "Esta semana para testar" x "Demais tarefas". O padrão vem
+     da Entrega (riscoPrazo); as marcas só existem para a tarefa movida CONTRA o
+     padrão (chave -> data ISO), como hgProx/hgAtual na Homologação. Ficam neste
+     navegador: a Checklist é a lista de cada pessoa. */
+  clSemana:{}, clDemais:{},
+  /* Checklist: esconde de uma vez Pronto para Merge e Teste Produção. */
+  clOcultaMP:false
 };
 
 /* ===================== estado ===================== */
@@ -411,6 +418,7 @@ var state = {
   clBuscaPessoa: "", clDestaque: 0,
   clJaAutoSelecionou: false,
   /* aba Homologação — recortes de quem está olhando, não viajam no pacote */
+  clVersao: "",
   hgBusca: "", hgVersao: "", hgStatus: "", hgSoPendentes: false,
   /* Ordenação da aba Homologação. Preferência de QUEM OLHA, como os filtros da
      tabela: não entra em CAMPOS_CHECK_TIME, porque ordenar a própria tela não é
@@ -1464,6 +1472,7 @@ function guardarRetomada(){
     sessionStorage.setItem(LS_RETOMAR, JSON.stringify({
       aba: state.aba,
       clBusca: state.clBusca,
+      clVersao: state.clVersao,
       fase: state.fase,
       filtros: state.filtros,
       hg: {busca:state.hgBusca, versao:state.hgVersao, status:state.hgStatus, soPendentes:state.hgSoPendentes,
@@ -1486,6 +1495,7 @@ function lerRetomada(){
   if(!RETOMADA) return;
   if(RETOMADA.aba) state.aba = RETOMADA.aba;
   if(typeof RETOMADA.clBusca === "string") state.clBusca = RETOMADA.clBusca;
+  if(typeof RETOMADA.clVersao === "string") state.clVersao = RETOMADA.clVersao;
   if(RETOMADA.fase) state.fase = RETOMADA.fase;
   /* Antes do render: a linha de filtros do cabeçalho é montada a partir de
      state.filtros, então restaurar aqui já devolve o que estava escolhido. */
@@ -1605,6 +1615,10 @@ function montarShell(){
   +   '</div>'
   +   '<div class="toolbar">'
   +     '<div class="busca">'+icon("search",13)+'<input id="in-busca-cl" placeholder="Filtrar"></div>'
+  /* Mesmo esquema da Homologação: recorte por versão corrigida com contagem,
+     e a coluna Versões corrigidas grava no Jira quando a chave "Versão grava no
+     Jira" da Homologação está em Sim (a chave é uma só, do time). */
+  +     '<select id="sel-cl-versao" class="sel-inline" title="Recorta a lista por versão"></select>'
   +     '<div class="dd" id="dd-status"><button class="btn" id="bt-cl-status">'+icon("filter",14)
   +       ' Status <span class="contador" id="ct-cl-status"></span></button>'
   +       '<div class="pop wide hidden" id="pop-cl-status"><div class="pop-acoes"><button id="st-todos">Todos</button>'
@@ -1620,6 +1634,8 @@ function montarShell(){
   +       '<div class="pop wide hidden" id="pop-feito"><div class="pop-cab">Tarefas nestes status já entram como '
   +       'feitas e vão para o fim da lista, riscadas. Se você desmarcar na mão, sua escolha prevalece.</div>'
   +       '<div class="pop-lista" id="pop-feito-lista"></div></div></div>'
+  +     '<button class="btn" id="bt-cl-mp" title="Esconde ou mostra de uma vez as tarefas em Pronto para Merge e Teste Produção, sem desmarcar status por status">'
+  +       icon("eyeoff",14)+' Ocultar merge e produção <span class="contador" id="ct-cl-mp"></span></button>'
   +     botaoColunas("checklist")
   +     '<div class="toolbar-dir" id="cl-toolbar-dir">'
   +       '<select id="sel-ordenacao" class="sel-inline" title="Como ordenar a lista. '
@@ -1630,6 +1646,11 @@ function montarShell(){
   +         '<option value="manual">Ordem definida</option>'
   +       '</select>'
   +     '</div>'
+  +   '</div>'
+  +   '<div class="hg-lote hidden" id="cl-lote">'+icon("alert",14)
+  +     '<span class="msg" id="cl-lote-msg"></span>'
+  +     '<button class="btn" id="bt-cl-descartar">Descartar</button>'
+  +     '<button class="btn btn-primary" id="bt-cl-aplicar">'+icon("check",14)+' Aplicar no Jira</button>'
   +   '</div>'
   +   '<div class="cl-list" id="cl-list">'
   /* Vazio: renderClCols() desenha, porque agora o cabeçalho é interativo. */
@@ -1708,7 +1729,8 @@ function montarShell(){
    "bt-cl-status","pop-cl-status","pop-cl-status-lista","ct-cl-status",
    "bt-teste","pop-teste","pop-teste-lista","ct-teste",
    "bt-feito","pop-feito","pop-feito-lista","ct-feito",
-   "sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir"
+   "sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir",
+   "sel-cl-versao","bt-cl-mp","ct-cl-mp","cl-lote","cl-lote-msg","bt-cl-descartar","bt-cl-aplicar"
   ].forEach(function(id){ el[id]=document.getElementById(id); });
 }
 
@@ -2415,7 +2437,7 @@ function ordenadasDaPessoa(pessoa){
    — passam pelas mesmas funções que a linha usa para exibi-los, senão a
    ordenação discordaria do que está escrito na tela. */
 function clValorOrd(t, col){
-  if(col === "versao") return versoesTexto(t);
+  if(col === "versao") return hgVersaoDe(t) === SEM_VERSAO ? "" : hgVersaoDe(t);
   if(col === "cliente") return infoCliente(t).nome;
   if(COLUNA_POR_ID[col]) return valorDaColuna(t, col);
   return t[col] || "";
@@ -2439,9 +2461,76 @@ function daPessoaCalc(){
      concluídas: ordenar por Status não pode trazer o que já foi feito de volta
      para o meio da fila. */
   var ordenadas = aplicarClSort(ordenadasDaPessoa(state.pessoa));
-  var pend=[], feitas=[];
-  ordenadas.forEach(function(t){ (estadoDe(t)==="feita"?feitas:pend).push(t); });
-  return pend.concat(feitas);
+  var semana=[], demais=[], feitas=[];
+  ordenadas.forEach(function(t){
+    if(estadoDe(t)==="feita") feitas.push(t);
+    else (clNaSemana(t) ? semana : demais).push(t);
+  });
+  /* Esta semana em cima, como a versão atual da Homologação; a ordem definida
+     (ou a coluna) vale dentro de cada bloco. */
+  return semana.concat(demais, feitas);
+}
+/* ---- Checklist: semana x demais, merge/produção e posição ---- */
+function clSemanaPorPrazo(t){
+  var r = riscoPrazo(t);
+  return r === "estourado" || r === "semana";
+}
+function clNaSemana(t){
+  if((state.check.clSemana || {})[t.key]) return true;
+  if((state.check.clDemais || {})[t.key]) return false;
+  return clSemanaPorPrazo(t);
+}
+function clEhMergeProd(t){ var f = faseDe(t); return f === "merge" || f === "prod"; }
+/* Grava a marca só quando o destino DISCORDA da Entrega; indo para onde a data
+   já levaria, apaga a marca e a tarefa volta a seguir o padrão. */
+function clMoverSemana(key, paraSemana){
+  var t = tarefaPorChave(key); if(!t) return;
+  var padrao = clSemanaPorPrazo(t);
+  atualizarCheck(function(c){
+    var sem = Object.assign({}, c.clSemana), dem = Object.assign({}, c.clDemais);
+    delete sem[key]; delete dem[key];
+    if(paraSemana !== padrao) (paraSemana ? sem : dem)[key] = new Date().toISOString();
+    return {clSemana:sem, clDemais:dem};
+  });
+  avisar("info", t.key + (paraSemana ? " entrou em Esta semana para testar." : " foi para Demais tarefas."));
+  renderChecklistAll();
+}
+function clGravarOrdem(seq){
+  if(!window.nimitz.preview){
+    window.nimitz.saveOrder(state.pessoa,seq).catch(function(err){ avisar("err",err.message); renderChecklistAll(); });
+    return;
+  }
+  var ordem = Object.assign({}, state.check.ordem);
+  if(!seq.length) delete ordem[state.pessoa]; else ordem[state.pessoa]=seq;
+  atualizarCheck({ordem:ordem});
+  renderChecklistAll();
+}
+/* Posição digitada: conta as linhas ATIVAS da tela, de cima para baixo, como a
+   coluna de prioridade da planilha. A tarefa não troca de bloco por aqui —
+   para isso existe a seta da coluna Semana —, então o número fica preso ao
+   trecho do bloco dela. */
+function clPosicionar(key, valor){
+  var ativas = clDerivados().visiveis.filter(function(t){ return estadoDe(t) !== "feita"; });
+  var keys = ativas.map(function(t){ return t.key; });
+  var de = keys.indexOf(key);
+  var n = parseInt(String(valor).trim(), 10);
+  if(de === -1 || isNaN(n)){ renderClList(); return; }
+  var nSem = ativas.filter(clNaSemana).length;
+  var naSemana = clNaSemana(ativas[de]);
+  var ini = naSemana ? 0 : nSem, fim = naSemana ? nSem : keys.length;
+  var idx = Math.min(Math.max(n-1, ini), fim-1);
+  if(n-1 < ini || n-1 >= fim){
+    avisar("info", key + " está em " + (naSemana ? "Esta semana para testar" : "Demais tarefas")
+      + " e foi para a posição " + (idx+1) + ", a " + (n-1 < ini ? "primeira" : "última") + " desse bloco. Para trocar de bloco, use a seta da coluna Semana.");
+  }
+  if(idx === de){ renderClList(); return; }
+  var alvo = keys[idx], depois = idx > de;
+  var seq = ordenadasDaPessoa(state.pessoa).map(function(x){ return x.key; });
+  seq.splice(seq.indexOf(key), 1);
+  var pos = seq.indexOf(alvo);
+  if(pos === -1){ renderClList(); return; }
+  seq.splice(depois ? pos+1 : pos, 0, key);
+  clGravarOrdem(seq);
 }
 /* clDerivados() percorre e ORDENA a lista inteira, e renderChecklistAll() a
    chama meia duzia de vezes na mesma passada. Com o pacote do projeto inteiro
@@ -2454,12 +2543,12 @@ function clDerivados(){
   var c = CL_CACHE;
   if(c && c.tarefas===state.tarefas && c.check===state.check && c.pessoa===state.pessoa
      && c.busca===state.clBusca && c.ordenacao===state.clOrdenacao
-     && c.sort===state.clSort){
+     && c.sort===state.clSort && c.versao===state.clVersao){
     return c.valor;
   }
   var valor = clDerivadosCalc();
   CL_CACHE = {tarefas:state.tarefas, check:state.check, pessoa:state.pessoa, busca:state.clBusca,
-              ordenacao:state.clOrdenacao, sort:state.clSort, valor:valor};
+              ordenacao:state.clOrdenacao, sort:state.clSort, versao:state.clVersao, valor:valor};
   return valor;
 }
 function clDerivadosCalc(){
@@ -2473,18 +2562,22 @@ function clDerivadosCalc(){
   });
   var statusDaPessoa = Array.from(contS.entries()).map(function(e){ return {status:e[0], qtd:e[1], fim:fimS.get(e[0])}; })
     .sort(function(a,b){ return (a.fim?1:0)-(b.fim?1:0) || a.status.localeCompare(b.status,"pt-BR"); });
-  var noFiltro = daPessoa.filter(function(t){ return !ocultosSet.has(t.status||SEM_STATUS); });
+  var qtdMP = daPessoa.filter(clEhMergeProd).length;
+  var noFiltro = daPessoa.filter(function(t){
+    if(state.check.clOcultaMP && clEhMergeProd(t)) return false;
+    return !ocultosSet.has(t.status||SEM_STATUS);
+  });
   var q = norm(state.clBusca);
   var visiveis = noFiltro.filter(function(t){
-    var est = estadoDe(t);
-    if(q && norm([t.key,t.summary,t.status,t.squad,t.cliente,versoesTexto(t)].join(" ")).indexOf(q)===-1) return false;
+    if(state.clVersao && hgVersaoDe(t) !== state.clVersao) return false;
+    if(q && norm([t.key,t.summary,t.status,t.squad,t.cliente,hgVersaoDe(t)].join(" ")).indexOf(q)===-1) return false;
     return true;
   });
   var resumo = {teste:0,dispensada:0,feita:0};
   noFiltro.forEach(function(t){ resumo[estadoDe(t)]++; });
   var qtdRevividas = noFiltro.filter(function(t){ return state.check.revividas[t.key]; }).length;
   return {daPessoa:daPessoa, statusDaPessoa:statusDaPessoa, noFiltro:noFiltro, visiveis:visiveis,
-          resumo:resumo, qtdRevividas:qtdRevividas};
+          resumo:resumo, qtdRevividas:qtdRevividas, qtdMP:qtdMP};
 }
 
 function renderPessoaBotao(){
@@ -2648,6 +2741,7 @@ function renderRevivePill(){
 
 var CL_COLUNAS = [
   {cls:"cl-c-grip",  rot:""},
+  {cls:"cl-c-pos",   rot:"Posição"},
   {cls:"cl-c-key",   rot:"Chave",      ord:"key"},
   {cls:"cl-summary", rot:"Resumo",     ord:"summary"},
   {cls:"cl-type",    rot:"Tipo",       ord:"type"},
@@ -2655,8 +2749,9 @@ var CL_COLUNAS = [
   {cls:"cl-squad",   rot:"Squad",      ord:"squad"},
   {cls:"cl-cliente", rot:"Cliente",    ord:"cliente"},
   {cls:"cl-prio",    rot:"Prioridade", ord:"priority"},
-  {cls:"cl-versao",  rot:"Versão",     ord:"versao"},
+  {cls:"cl-versao",  rot:"Versões corrigidas", ord:"versao"},
   {cls:"cl-updated", rot:"Entrega",    ord:"prazo"},
+  {cls:"cl-c-sem",   rot:"Semana"},
   {cls:"cl-c-act",   rot:""}
 ];
 /* Três estados, como na Homologação: crescente, decrescente e NENHUM. Sem o
@@ -2724,8 +2819,24 @@ function renderClList(){
   }
   var partes = [];
   var separadorInserido = false;
+  var ativasVis = visiveis.filter(function(t){ return estadoDe(t) !== "feita"; });
+  var qtdSemana = ativasVis.filter(clNaSemana).length;
+  var podeArrastar = state.clOrdenacao === "manual" && !state.clSort.col && window.nimitz.canReorder();
+  var sepSemana = false, sepDemais = false, posAtiva = 0;
   visiveis.forEach(function(t,i){
     var estado = estadoDe(t);
+    var naSemana = estado !== "feita" && clNaSemana(t);
+    if(estado !== "feita" && qtdSemana){
+      if(naSemana && !sepSemana){
+        sepSemana = true;
+        partes.push('<div class="section-sep sep-semana"><span>Esta semana para testar ('+qtdSemana+')'
+          + ' — entram na versão de '+fmtDiaMes(janelaRelease().r1)+'</span><span class="line"></span></div>');
+      }
+      if(!naSemana && !sepDemais){
+        sepDemais = true;
+        partes.push('<div class="section-sep"><span>Demais tarefas ('+(ativasVis.length-qtdSemana)+')</span><span class="line"></span></div>');
+      }
+    }
     if(!separadorInserido && estado==="feita"){
       separadorInserido = true;
       partes.push('<div class="section-sep"><span>Concluídas ('+d.resumo.feita+')</span><span class="line"></span></div>');
@@ -2749,13 +2860,25 @@ function renderClList(){
     /* Arrastar com a lista ordenada por coluna gravaria para o TIME uma ordem
        que ninguém pediu: o que se vê na tela não é a ordem definida, e o solto
        seria escrito como se fosse. */
-    var podeArrastar = state.clOrdenacao === "manual" && !state.clSort.col && window.nimitz.canReorder();
+    if(estado !== "feita") posAtiva++;
+    var celPos = estado === "feita" ? '<span class="cl-pos"></span>'
+      : '<span class="cl-pos"><input type="text" inputmode="numeric" data-pos="1" value="'+posAtiva+'"'
+        + (podeArrastar ? ' title="Digite a posição e tecle Enter: 1 manda para o topo do bloco, 3 para a terceira linha… Vale para o time, como o arrastar."'
+                        : ' disabled title="Para mudar a posição, deixe a ordenação em “Ordem definida” e sem ordenar por coluna"')+'></span>';
+    var celSem = estado === "feita" ? '<span class="cl-sem"></span>'
+      : '<span class="cl-sem">'+(naSemana
+          ? '<button type="button" data-sem="demais" title="Passar para Demais tarefas'
+            + (clSemanaPorPrazo(t) ? " (a Entrega pede esta semana; fica marcado só neste navegador)" : "")+'">'+icon("arrowdown",15)+'</button>'
+          : '<button type="button" data-sem="semana" title="Trazer para Esta semana para testar'
+            + (clSemanaPorPrazo(t) ? "" : " (a Entrega não pede; fica marcado só neste navegador)")+'">'+icon("up",15)+'</button>')
+        + '</span>';
     partes.push('<div class="cl-row '+rowCls+'" draggable="'+(podeArrastar?"true":"false")+'"'
       + ' title="'+(podeArrastar?"":"Para reordenar arrastando, mude a ordenação para “Ordem definida”")+'"'
-      + ' data-grupo="'+(estado==="feita"?"feita":"ativo")+'"'
+      + ' data-grupo="'+(estado==="feita"?"feita":naSemana?"semana":"ativo")+'"'
       + ' data-key="'+encodeURIComponent(t.key)+'" data-idx="'+i+'">'
       + '<span class="cl-stripe" style="'+faixa+'"></span>'
       + '<span class="grip">'+icon("grip",14)+'</span>'
+      + celPos
       + '<span class="ponto-key-cell"><a class="cl-key mono" style="'+risco+'" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
       + '<span class="cl-summary"><span class="txt" style="'+risco+'">'+esc(t.summary)+'</span>'
       +   (voltou?'<span class="chip-mini chip-voltou">Voltou</span>':"")
@@ -2770,10 +2893,12 @@ function renderClList(){
       + '<span class="cl-squad cel-faint">'+esc(t.squad)+'</span>'
       + '<span class="cl-cliente'+(cli.externo?"":" cel-faint")+'" title="'+esc(cli.nome)+'">'+esc(cli.nome)+'</span>'
       + '<span class="cl-prio" style="color:'+(estado==="teste"?prio.cor:"var(--text-faint)")+';font-weight:'+(estado==="teste"?prio.peso:"400")+';">'+esc(t.priority)+'</span>'
-      + '<span class="cl-versao cel-faint'+(ajusteDeVersao(t)?" ajustada":"")+'" title="'+esc(tituloVersao(t))+'">'
-      +   esc(versoesTexto(t))+'</span>'
+      + '<span class="cl-versao'+(hgGravaJira() && state.hgRascunho[t.key] !== undefined ? " pendente" : "")+'" title="Versões corrigidas no Jira'
+      +   (hgGravaJira() ? " — mudar aqui grava lá" : " (gravação desligada — ligue em Versão grava no Jira, na aba Homologação)")+'">'
+      +   opcoesVersaoLinha(t)+'</span>'
       + '<span class="cl-updated cel-faint'+mp.cls+'" title="'+esc(mp.titulo)+'">'+mp.icone+fmtData(t.prazo)+'</span>'
       + celulasExtras("checklist", t)
+      + celSem
       + '<button class="cl-dismiss" data-act="dispensa"'+(t.impedida?' disabled style="opacity:.35;cursor:default;"':'')
       +   ' title="'+(t.impedida ? "O impedimento está marcado no Jira; tire de lá para voltar à fila"
                      : estado==="dispensada" ? "Trazer de volta para a lista ativa (só para você)"
@@ -2790,6 +2915,26 @@ function wireClRows(){
     var key = decodeURIComponent(row.getAttribute("data-key"));
     var t = state.tarefas.filter(function(x){return x.key===key;})[0];
     if(!t) return;
+
+    var inPos = row.querySelector("[data-pos]");
+    if(inPos && !inPos.disabled){
+      inPos.addEventListener("mousedown", function(e){ e.stopPropagation(); });
+      inPos.onfocus = function(){ inPos.select(); };
+      inPos.onkeydown = function(e){
+        if(e.key === "Enter"){ e.preventDefault(); inPos.blur(); }
+        else if(e.key === "Escape"){ inPos.value = inPos.defaultValue; inPos.blur(); }
+      };
+      inPos.onchange = function(){ clPosicionar(key, inPos.value); };
+    }
+    var btSem = row.querySelector("[data-sem]");
+    if(btSem) btSem.onclick = function(){ clMoverSemana(key, btSem.getAttribute("data-sem") === "semana"); };
+
+    var selV = row.querySelector("[data-versao]");
+    if(selV){
+      selV.onchange = function(){ marcarRascunho(key, selV.value); };
+      /* A linha é arrastável: sem isso, clicar no select pode virar arraste. */
+      selV.addEventListener("mousedown", function(e){ e.stopPropagation(); });
+    }
 
     var btDisp = row.querySelector('[data-act="dispensa"]');
     if(t.impedida) btDisp.onclick = null; else btDisp.onclick = function(){
@@ -2847,14 +2992,7 @@ function wireClRows(){
       var pos = seq.indexOf(alvo.key);
       if(pos === -1) return;
       seq.splice(alvo.depois ? pos+1 : pos, 0, movida);
-      if(!window.nimitz.preview){
-        window.nimitz.saveOrder(state.pessoa,seq).catch(function(err){ avisar("err",err.message); });
-        return;
-      }
-      var ordem = Object.assign({}, state.check.ordem);
-      if(!seq.length) delete ordem[state.pessoa]; else ordem[state.pessoa]=seq;
-      atualizarCheck({ordem:ordem});
-      renderChecklistAll();
+      clGravarOrdem(seq);
     });
   });
 }
@@ -3545,7 +3683,7 @@ function trocarGravaJira(liga){
     ? "A coluna Versões Corrigidas passa a GRAVAR no Jira, e isso vale para todo o time. "
       + "Cada mudança ainda pede confirmação antes de sair daqui."
     : "A coluna Versões Corrigidas voltou a ser só leitura.");
-  renderHomolog(); renderTopo();
+  renderHomolog(); renderChecklistAll();
 }
 
 function confirmarAcao(titulo, texto, rotuloSim, aoSim){
@@ -3563,8 +3701,8 @@ function confirmarAcao(titulo, texto, rotuloSim, aoSim){
     + '<button class="btn" data-nao="1">Cancelar</button>'
     + '<button class="btn btn-primary" data-sim="1">'+esc(rotuloSim)+'</button></div></div>';
   function fechar(){ fundo.remove(); }
-  fundo.querySelector("[data-nao]").onclick = function(){ fechar(); renderHomolog(); };
-  fundo.onclick = function(e){ if(e.target === fundo){ fechar(); renderHomolog(); } };
+  fundo.querySelector("[data-nao]").onclick = function(){ fechar(); renderVersaoAbas(); };
+  fundo.onclick = function(e){ if(e.target === fundo){ fechar(); renderVersaoAbas(); } };
   fundo.querySelector("[data-sim]").onclick = function(){ fechar(); aoSim(); };
   document.body.appendChild(fundo);
   fundo.querySelector("[data-sim]").focus();
@@ -3599,7 +3737,7 @@ function carregarVersoesJira(forcar){
     state.versoesJira = (campo.allowedValues || []).filter(function(v){ return v && v.name && !v.archived; })
       .map(function(v){ return {name:v.name, lancada:!!v.released, data:v.releaseDate || ""}; });
     try{ localStorage.setItem(LS_VERSOES_JIRA, JSON.stringify(state.versoesJira)); }catch(e){}
-    renderHomolog();
+    renderVersaoAbas();
   }).catch(function(err){
     state.versoesJiraCarregando = false;
     state.versoesJiraSessao = true;
@@ -3643,29 +3781,37 @@ function marcarRascunho(key, valor){
   if(textoVersoes(corrigidasDe(t)) === textoVersoes(novasDoValor(valor))) delete state.hgRascunho[key];
   else state.hgRascunho[key] = valor;
   salvarRascunho();
-  renderHomolog();
+  renderVersaoAbas();
 }
 function descartarRascunho(){
   state.hgRascunho = {};
   salvarRascunho();
-  renderHomolog();
+  renderVersaoAbas();
 }
+/* O rascunho é um só para as duas abas (é por tarefa): escolher na Checklist
+   aparece pendente na Homologação e vice-versa, e o Aplicar de qualquer uma
+   grava todos. */
+function renderVersaoAbas(){ renderHomolog(); renderChecklistAll(); }
 function renderLote(){
-  if(!el["hg-lote"]) return;
+  preencherLote("hg", function(){ return hgDerivados().visiveis; });
+  preencherLote("cl", function(){ return clDerivados().visiveis; });
+}
+function preencherLote(p, visiveisDe){
+  if(!el[p+"-lote"]) return;
   podarRascunho();
   var ks = Object.keys(state.hgRascunho);
   var mostra = hgGravaJira() && ks.length > 0;
-  el["hg-lote"].classList.toggle("hidden", !mostra);
+  el[p+"-lote"].classList.toggle("hidden", !mostra);
   if(!mostra) return;
   var visiveis = {};
-  hgDerivados().visiveis.forEach(function(t){ visiveis[t.key] = true; });
+  visiveisDe().forEach(function(t){ visiveis[t.key] = true; });
   var escondidas = ks.filter(function(k){ return !visiveis[k]; }).length;
-  el["hg-lote-msg"].innerHTML = '<b>'+ks.length+'</b> '+(ks.length===1 ? "versão alterada" : "versões alteradas")
+  el[p+"-lote-msg"].innerHTML = '<b>'+ks.length+'</b> '+(ks.length===1 ? "versão alterada" : "versões alteradas")
     + ' e ainda <b>não gravada'+(ks.length===1?"":"s")+'</b> no Jira.'
     + (escondidas ? ' ('+escondidas+' fora do filtro atual.)' : '');
   var ocupado = !!state.hgGravando || state.carregando;
-  el["bt-hg-aplicar"].disabled = ocupado;
-  el["bt-hg-descartar"].disabled = ocupado;
+  el["bt-"+p+"-aplicar"].disabled = ocupado;
+  el["bt-"+p+"-descartar"].disabled = ocupado;
 }
 
 function aplicarRascunho(){
@@ -3679,7 +3825,7 @@ function aplicarRascunho(){
     var t = tarefaPorChave(k);
     return {key:k, t:t, de:textoVersoes(corrigidasDe(t)), novas:novasDoValor(state.hgRascunho[k])};
   });
-  if(!itens.length){ renderHomolog(); return; }
+  if(!itens.length){ renderVersaoAbas(); return; }
   confirmarAcao("Gravar "+itens.length+" versão(ões) no Jira",
     'Versões corrigidas de <b>'+itens.length+'</b> tarefa(s):'
     + '<div class="lote-lista">' + itens.map(function(i){
@@ -3697,7 +3843,7 @@ function aplicarRascunho(){
 function gravarLote(itens){
   state.hgGravando = "lote";
   var oks = [], erros = [];
-  renderHomolog();
+  renderVersaoAbas();
   function proximo(i){
     if(i >= itens.length) return terminar();
     var it = itens[i];
@@ -3919,7 +4065,27 @@ function renderChecklistAll(){
   setTimeout(function(){ if(window.nimitz.refreshOrder) window.nimitz.refreshOrder(); },0);
   renderClCols();
   renderPessoaBotao(); renderProgressoChecklist(); renderStatusPanels();
-  renderRevivePill(); renderClList(); renderTopo();
+  renderRevivePill(); renderClVersao(); renderClList(); renderTopo();
+}
+/* Igual ao seletor da Homologação: sai dos dados, com a contagem do recorte da
+   pessoa e dos status visíveis (sem a busca). */
+function renderClVersao(){
+  if(!el["sel-cl-versao"]) return;
+  var base = clDerivados().noFiltro;
+  var porVersao = {};
+  base.forEach(function(t){ var v = hgVersaoDe(t); porVersao[v] = (porVersao[v] || 0) + 1; });
+  if(state.clVersao && porVersao[state.clVersao] === undefined) state.clVersao = "";
+  el["sel-cl-versao"].innerHTML = '<option value="">Todas as versões ('+base.length+')</option>'
+    + hgOrdemVersoes(Object.keys(porVersao)).map(function(v){
+        return '<option value="'+esc(v)+'">'+esc(hgRotuloVersao(v))+' ('+porVersao[v]+')</option>';
+      }).join("");
+  el["sel-cl-versao"].value = state.clVersao;
+  var dmp = clDerivados();
+  el["ct-cl-mp"].textContent = dmp.qtdMP;
+  el["bt-cl-mp"].classList.toggle("btn-on", !!state.check.clOcultaMP);
+  el["bt-cl-mp"].classList.toggle("hidden", !dmp.qtdMP && !state.check.clOcultaMP);
+  if(hgGravaJira() && state.aba === "checklist") carregarVersoesJira(false);
+  preencherLote("cl", function(){ return clDerivados().visiveis; });
 }
 
 /* ===================== popovers da checklist ===================== */
@@ -4072,6 +4238,10 @@ function ligarEventos(){
   el["in-busca-hg"].addEventListener("input", function(){
     state.hgBusca = el["in-busca-hg"].value; renderHomolog();
   });
+  el["sel-cl-versao"].onchange = function(){ state.clVersao = el["sel-cl-versao"].value; renderChecklistAll(); };
+  el["bt-cl-mp"].onclick = function(){ atualizarCheck({clOcultaMP: !state.check.clOcultaMP}); renderChecklistAll(); };
+  el["bt-cl-descartar"].onclick = descartarRascunho;
+  el["bt-cl-aplicar"].onclick = aplicarRascunho;
   el["sel-hg-versao"].onchange = function(){ state.hgVersao = el["sel-hg-versao"].value; renderHomolog(); };
   el["sel-hg-status"].onchange = function(){ state.hgStatus = el["sel-hg-status"].value; renderHomolog(); };
   el["bt-hg-grava-nao"].onclick = function(){ trocarGravaJira(false); };
@@ -4211,7 +4381,7 @@ var GRADE_NATIVAS = {
   checklist: [
     {id:"type", rot:"Tipo", sel:".cl-type"}, {id:"status", rot:"Status", sel:".cl-status"},
     {id:"squad", rot:"Squad", sel:".cl-squad"}, {id:"cliente", rot:"Cliente", sel:".cl-cliente"},
-    {id:"priority", rot:"Prioridade", sel:".cl-prio"}, {id:"versao", rot:"Versão", sel:".cl-versao"},
+    {id:"priority", rot:"Prioridade", sel:".cl-prio"}, {id:"versao", rot:"Versões corrigidas", sel:".cl-versao"},
     {id:"prazo", rot:"Entrega", sel:".cl-updated"}
   ],
   homolog: [
@@ -4302,7 +4472,7 @@ var GRADE_PADRAO_ORDEM = {
   homolog:["type","status","testAnalyst","estimativa","versao","fase","prazo","obs"]
 };
 var GRADE_FASE_SEL = [".hg-c-fase",".hg-fase"];
-var GRADE_FIM = {checklist:[".cl-c-act",".cl-dismiss"], homolog:[".hg-c-act",".hg-act"]};
+var GRADE_FIM = {checklist:[".cl-c-sem",".cl-sem",".cl-c-act",".cl-dismiss"], homolog:[".hg-c-act",".hg-act"]};
 function ordemDe(aba){ var o = state.colunas.ordem && state.colunas.ordem[aba]; return Array.isArray(o) ? o : []; }
 function ordenarColunas(aba, ids){
   var salvo = ordemDe(aba).filter(function(id){ return ids.indexOf(id) !== -1; });
