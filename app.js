@@ -3518,7 +3518,15 @@ var HG_SEM = "__sem__";
    na fila, as RECENTES_VERSAO mais novas do projeto, e a da própria tarefa —
    que pode ser antiga e não pode desaparecer da caixa que a mostra. */
 var RECENTES_VERSAO = 10;
-function versoesParaAjuste(atual){
+/* A lista-base das caixas de versão é a MESMA para todas as linhas, mas era
+   recalculada a cada caixa — percorrendo o projeto inteiro duas vezes por
+   select. Com dois selects por linha na Checklist, trocar uma posição levava
+   mais de 1 s com 47 linhas. Agora sai uma vez e fica em cache até as tarefas,
+   o check ou as versões do Jira mudarem (são sempre objetos novos). */
+var VERSOES_AJUSTE_CACHE = null;
+function versoesBaseAjuste(){
+  var c = VERSOES_AJUSTE_CACHE;
+  if(c && c.t === state.tarefas && c.c === state.check && c.j === state.versoesJira) return c.v;
   var s = {};
   tarefasHomolog().forEach(function(t){
     corrigidasDe(t).forEach(function(v){ s[v] = true; });
@@ -3527,8 +3535,14 @@ function versoesParaAjuste(atual){
      releases que o painel conhece. Serve como fonte dos releases recentes; o
      Jira recusa o que não existir. */
   versoesPresentes().slice(0, RECENTES_VERSAO).forEach(function(v){ s[v] = true; });
-  if(atual) s[atual] = true;
-  return Object.keys(s).sort(function(a,b){ return b.localeCompare(a,"pt-BR"); });
+  var v = {base:Object.keys(s).sort(function(a,b){ return b.localeCompare(a,"pt-BR"); }), futuras:versoesNaoLancadas()};
+  VERSOES_AJUSTE_CACHE = {t:state.tarefas, c:state.check, j:state.versoesJira, v:v};
+  return v;
+}
+function versoesParaAjuste(atual){
+  var base = versoesBaseAjuste().base;
+  if(!atual || base.indexOf(atual) !== -1) return base;
+  return base.concat([atual]).sort(function(a,b){ return b.localeCompare(a,"pt-BR"); });
 }
 /* Com a gravação desligada a célula é TEXTO, e não um select morto: um campo
    que se mexe e não faz nada é pior que campo nenhum. Quem liga é o time, na
@@ -3559,7 +3573,7 @@ function opcoesVersaoLinha(t, campo){
   var r = C.rascunho()[t.key];
   if(r !== undefined) alvo = (r === HG_SEM) ? "" : r;
   function opt(v){ return '<option value="'+esc(v)+'"'+(v === alvo ? " selected" : "")+'>'+esc(v)+'</option>'; }
-  var futuras = versoesNaoLancadas();
+  var futuras = versoesBaseAjuste().futuras;
   var vs = versoesParaAjuste(alvo).filter(function(v){ return futuras.indexOf(v) === -1; });
   var opts = futuras.length
     ? '<optgroup label="Não lançadas no Jira">'+futuras.map(opt).join("")+'</optgroup>'
