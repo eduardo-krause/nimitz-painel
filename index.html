@@ -515,7 +515,7 @@ tr:hover .chave svg{opacity:.6;}
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
   font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .cl-list{flex:1;min-height:0;overflow:auto;}
-#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1368px + 2 * var(--row-gap));}
+#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1344px + 2 * var(--row-gap));}
 .cl-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
   border-bottom:1px solid var(--border);background:var(--surface);}
 .cl-row:hover{background:var(--surface-2);}
@@ -545,12 +545,12 @@ tr:hover .chave svg{opacity:.6;}
 .cl-dismiss,.cl-c-act{width:var(--w-act);flex:none;}
 /* Posição digitada (como a coluna de prioridade da planilha) e a seta que troca
    a tarefa entre Esta semana e Demais tarefas. */
-.cl-pos,.cl-c-pos{width:64px;flex:none;}
-.cl-pos input{width:44px;height:var(--ctrl-h-sm);border:1px solid var(--border);border-radius:var(--r-sm);
+.cl-pos,.cl-c-pos{width:52px;flex:none;display:flex;justify-content:center;text-align:center;}
+.cl-pos input{width:38px;height:var(--ctrl-h-sm);border:1px solid var(--border);border-radius:var(--r-sm);
   background:var(--surface);color:var(--text);text-align:center;font-family:var(--font-mono);font-size:var(--fs-xs);outline:0;}
 .cl-pos input:focus{border-color:var(--focus);}
 .cl-pos input:disabled{opacity:.45;cursor:not-allowed;}
-.cl-sem,.cl-c-sem{width:64px;flex:none;display:flex;align-items:center;justify-content:center;}
+.cl-sem,.cl-c-sem{width:52px;flex:none;display:flex;align-items:center;justify-content:center;text-align:center;}
 .cl-sem button{display:flex;align-items:center;justify-content:center;width:26px;height:20px;padding:0;
   border:0;border-radius:var(--r-sm);background:transparent;color:var(--text-faint);cursor:pointer;}
 .cl-sem button:hover{background:var(--surface-3);color:var(--accent-2);}
@@ -758,6 +758,6 @@ tr:hover .chave svg{opacity:.6;}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261117c"></script>
+<script type="module" src="./boot.js?v=20261117d"></script>
 </body>
 </html>

@@ -4600,9 +4600,9 @@ function aplicarCssColunas(){
   /* A linha tem largura mínima fixa no CSS, pensada sem colunas extras. Cada
      extra soma a sua largura (e o espaço entre colunas); sem isso o fundo da
      linha acaba antes das últimas células. */
-  /* Checklist: 1220 + Posição (64) + Semana (64) + Versões corrigidas mais
-     larga (+20) = 1368, e as duas colunas novas somam dois espaços. */
-  var BASE_GRADE = {checklist:1368, homolog:1660}, GAPS_BASE = {checklist:2, homolog:0};
+  /* Checklist: 1220 + Posição (52) + Semana (52) + Versões corrigidas mais
+     larga (+20) = 1344, e as duas colunas novas somam dois espaços. */
+  var BASE_GRADE = {checklist:1344, homolog:1660}, GAPS_BASE = {checklist:2, homolog:0};
   ["checklist","homolog"].forEach(function(g){
     var ex = extrasDaGrade(g), soma = 0;
     ex.forEach(function(c){ soma += c.w; });
