@@ -348,10 +348,12 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
    automático (foi o que aconteceu na primeira tentativa: a tabela mediu 1915px
    em vez dos 1492px declarados). Por isso cabecalho() escreve a largura em px,
    a soma das colunas visíveis, junto com o colgroup.
-   min-width:100% cobre o caso oposto: viewport mais largo que a soma, onde a
+   Sem min-width:100%: com ela a sobra da tela era dividida entre as colunas e o
+   Resumo encolhia a cada coluna nova. Agora cada coluna tem largura fixa e as
+   extras vão para a rolagem lateral (antes: viewport mais largo que a soma, onde a
    tabela preenche em vez de deixar um vão à direita — as colunas então dividem
    a sobra proporcionalmente, o que continua estável ao rolar. */
-table{table-layout:fixed;min-width:100%;border-collapse:separate;border-spacing:0;
+table{table-layout:fixed;border-collapse:separate;border-spacing:0;
   font-size:var(--fs-sm);}
 thead th{position:sticky;top:0;padding:0;background:var(--surface-2);z-index:20;text-align:left;
   vertical-align:bottom;}
@@ -482,7 +484,7 @@ tr:hover .chave svg{opacity:.6;}
   --accent-1-ink:#ffffff; --success-ink:#ffffff;
   --w-grip:16px; --w-key:88px; --w-type:80px; --w-status:152px;
   --w-squad:96px; --w-cliente:144px; --w-prio:80px; --w-versao:132px;
-  --w-entrega:72px; --w-act:26px; --w-summary-min:180px;
+  --w-entrega:72px; --w-act:26px; --w-summary:340px;
 }
 
 /* faixa de cabeçalho: pessoa, atualizar, progresso, pílulas de estado */
@@ -510,12 +512,12 @@ tr:hover .chave svg{opacity:.6;}
 
 /* cabeçalho, linhas e separadores compartilham recuo, gap e larguras */
 .cl-cols,.cl-row,.section-sep{display:flex;align-items:center;gap:var(--row-gap);
-  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1220px;}
+  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1380px;}
 .cl-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
   font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .cl-list{flex:1;min-height:0;overflow:auto;}
-#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1476px + 3 * var(--row-gap));}
+#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1636px + 3 * var(--row-gap));}
 .cl-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
   border-bottom:1px solid var(--border);background:var(--surface);}
 .cl-row:hover{background:var(--surface-2);}
@@ -533,7 +535,7 @@ tr:hover .chave svg{opacity:.6;}
 .grip,.cl-c-grip{width:var(--w-grip);flex:none;}
 .grip{color:var(--text-faint);cursor:grab;}
 .cl-key,.cl-c-key{width:var(--w-key);flex:none;}
-.cl-summary{flex:1;min-width:var(--w-summary-min);display:flex;align-items:center;gap:var(--sp-2);}
+.cl-summary{flex:none;width:var(--w-summary);min-width:var(--w-summary);display:flex;align-items:center;gap:var(--sp-2);}
 .cl-summary .txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .cl-type{width:var(--w-type);flex:none;}
 .cl-status{width:var(--w-status);flex:none;}
@@ -594,12 +596,12 @@ tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
    na frente e a observação livre no fim — as colunas G e N da aba "Testes
    (homolog master)" da planilha de versões, que é o que esta aba substitui. */
 .hg-cols,.hg-row,.hg-sep{display:flex;align-items:center;gap:var(--row-gap);
-  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1560px;}
+  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1720px;}
 .hg-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
   font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
 .hg-list{flex:1;min-height:0;overflow:auto;}
-#hg-rows{padding-bottom:var(--sp-4);min-width:1660px;}
+#hg-rows{padding-bottom:var(--sp-4);min-width:1820px;}
 .hg-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
   border-bottom:1px solid var(--border);background:var(--surface);}
 .hg-row:hover{background:var(--surface-2);}
@@ -764,6 +766,6 @@ tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261117k"></script>
+<script type="module" src="./boot.js?v=20261118a"></script>
 </body>
 </html>
