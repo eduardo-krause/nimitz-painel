@@ -349,6 +349,8 @@ svg.icon{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-w
    em vez dos 1492px declarados). Por isso cabecalho() escreve a largura em px,
    a soma das colunas visíveis, junto com o colgroup.
    Sem min-width:100%: com ela a sobra da tela era dividida entre as colunas e o
+   Resumo encolhia a cada coluna nova. Agora ajustarLarguraTabela() (app.js) põe
+   a sobra só no Resumo, em px. (histórico: o
    Resumo encolhia a cada coluna nova. Agora cada coluna tem largura fixa e as
    extras vão para a rolagem lateral (antes: viewport mais largo que a soma, onde a
    tabela preenche em vez de deixar um vão à direita — as colunas então dividem
@@ -512,12 +514,15 @@ tr:hover .chave svg{opacity:.6;}
 
 /* cabeçalho, linhas e separadores compartilham recuo, gap e larguras */
 .cl-cols,.cl-row,.section-sep{display:flex;align-items:center;gap:var(--row-gap);
-  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1380px;}
+  padding-left:var(--gutter);padding-right:var(--gutter);}
 .cl-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
   font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
-.cl-list{flex:1;min-height:0;overflow:auto;}
-#cl-rows{padding-bottom:var(--sp-4);min-width:calc(1636px + 3 * var(--row-gap));}
+/* Largura da grade = soma real das colunas (max-content), ou a tela se for maior.
+   Cabeçalho, linhas e separadores ficam na mesma trilha, então terminam juntos —
+   sem número de largura escrito à mão, que quebrava a cada coluna nova. */
+.cl-list,.hg-list{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:auto;align-content:start;}
+#cl-rows{padding-bottom:var(--sp-4);}
 .cl-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
   border-bottom:1px solid var(--border);background:var(--surface);}
 .cl-row:hover{background:var(--surface-2);}
@@ -535,8 +540,8 @@ tr:hover .chave svg{opacity:.6;}
 .grip,.cl-c-grip{width:var(--w-grip);flex:none;}
 .grip{color:var(--text-faint);cursor:grab;}
 .cl-key,.cl-c-key{width:var(--w-key);flex:none;}
-.cl-summary{flex:none;width:var(--w-summary);min-width:var(--w-summary);display:flex;align-items:center;gap:var(--sp-2);}
-.cl-summary .txt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cl-summary{flex:1 0 var(--w-summary);min-width:var(--w-summary);display:flex;align-items:center;gap:var(--sp-2);}
+.cl-summary .txt{flex:1 1 0;width:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .cl-type{width:var(--w-type);flex:none;}
 .cl-status{width:var(--w-status);flex:none;}
 .cl-squad{width:var(--w-squad);flex:none;}
@@ -596,12 +601,11 @@ tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
    na frente e a observação livre no fim — as colunas G e N da aba "Testes
    (homolog master)" da planilha de versões, que é o que esta aba substitui. */
 .hg-cols,.hg-row,.hg-sep{display:flex;align-items:center;gap:var(--row-gap);
-  padding-left:var(--gutter);padding-right:var(--gutter);min-width:1720px;}
+  padding-left:var(--gutter);padding-right:var(--gutter);}
 .hg-cols{padding-top:var(--sp-2);padding-bottom:var(--sp-2);border-bottom:1px solid var(--border);
   background:var(--surface-2);color:var(--text-faint);position:sticky;top:0;z-index:5;
   font-size:var(--fs-label);font-weight:700;letter-spacing:var(--track-label);}
-.hg-list{flex:1;min-height:0;overflow:auto;}
-#hg-rows{padding-bottom:var(--sp-4);min-width:1820px;}
+#hg-rows{padding-bottom:var(--sp-4);}
 .hg-row{position:relative;padding-top:var(--sp-2);padding-bottom:var(--sp-2);min-height:40px;
   border-bottom:1px solid var(--border);background:var(--surface);}
 .hg-row:hover{background:var(--surface-2);}
@@ -766,6 +770,6 @@ tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261118a"></script>
+<script type="module" src="./boot.js?v=20261118b"></script>
 </body>
 </html>

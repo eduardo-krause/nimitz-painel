@@ -2043,6 +2043,34 @@ function fecharPopsTab(){
   el["pop-data"].classList.toggle("hidden", !(state.menuTab && state.menuTab.indexOf("data:")===0));
 }
 
+/* Tabela = max(tela, soma das colunas). Toda a sobra vai para o Resumo, que
+   nunca fica abaixo da largura dele: com poucas colunas não sobra vão no fim,
+   com muitas as extras vão para a rolagem lateral e nada é espremido. Em px,
+   porque o Chrome ignora calc(100% - X) no <col> e espalha a sobra por todas.
+   As larguras saem daqui e de nenhum outro lugar; a largura definida na tabela
+   é o que liga o layout fixo (sem ela o colgroup seria ignorado). */
+function ajustarLarguraTabela(cols){
+  cols = cols || colunasVisiveis();
+  if(!el["colgroup"] || !el["tabela"]) return;
+  var soma = 0;
+  cols.forEach(function(c){ soma += c.w; });
+  /* Recalcula sozinho quando a área muda: janela redimensionada, aba que
+     estava escondida (largura 0) ficando visível, barra de rolagem aparecendo. */
+  if(el["scroll"] && !el["scroll"]._obsLargura && window.ResizeObserver){
+    el["scroll"]._obsLargura = new ResizeObserver(function(){ ajustarLarguraTabela(); });
+    el["scroll"]._obsLargura.observe(el["scroll"]);
+  }
+  var tela = el["scroll"] ? el["scroll"].clientWidth : 0;
+  var sobra = Math.max(0, tela - soma);
+  var temResumo = cols.some(function(c){ return c.id==="summary"; });
+  var html = cols.map(function(c){
+    var w = c.w + (c.id==="summary" ? sobra : 0);
+    return '<col style="width:'+w+'px">';
+  }).join("");
+  if(el["colgroup"].innerHTML !== html) el["colgroup"].innerHTML = html;
+  el["tabela"].style.width = (soma + (temResumo ? sobra : 0)) + "px";
+}
+
 function cabecalho(){
   var cols = colunasVisiveis();
 
@@ -2050,18 +2078,7 @@ function cabecalho(){
      duas linhas do thead e para todas as do tbody, e não depende de qual linha
      é a primeira — o que importa porque a primeira linha do tbody costuma ser
      o espaçador da virtualização, um <td colspan> sem largura de coluna. */
-  if(el["colgroup"]){
-    el["colgroup"].innerHTML = cols.map(function(c){
-      return '<col style="width:'+c.w+'px">';
-    }).join("");
-  }
-  /* A largura definida que liga o layout fixo. Sem ela o colgroup acima seria
-     ignorado e as colunas voltariam a seguir o conteúdo. */
-  if(el["tabela"]){
-    var largura = 0;
-    cols.forEach(function(c){ largura += c.w; });
-    el["tabela"].style.width = largura + "px";
-  }
+  ajustarLarguraTabela(cols);
 
   var titulos = "<tr>" + cols.map(function(c){
     var on = state.sort.col===c.id;
@@ -4787,20 +4804,8 @@ function aplicarCssColunas(){
       GRADE_LINHA[g].forEach(function(linha){ css += GRADE_PAINEL[g]+" "+linha+" > "+sel+"{order:999}"; });
     });
   });
-  /* A linha tem largura mínima fixa no CSS, pensada sem colunas extras. Cada
-     extra soma a sua largura (e o espaço entre colunas); sem isso o fundo da
-     linha acaba antes das últimas células. */
-  /* Resumo com largura fixa (340, antes mínimo de 180): +160 nas bases.
-     Checklist: 1220 + Posição (52) + Semana (52) + Versões corrigidas mais
-     larga (+20) + Versão entrega (132) = 1476, com três espaços a mais.
-     Homologação: 1660 + Versão entrega (132), um espaço a mais. */
-  var BASE_GRADE = {checklist:1636, homolog:1952}, GAPS_BASE = {checklist:3, homolog:1};
-  ["checklist","homolog"].forEach(function(g){
-    var ex = extrasDaGrade(g), soma = 0;
-    ex.forEach(function(c){ soma += c.w; });
-    var pre = g === "homolog" ? "#hg-" : "#cl-";
-    css += GRADE_PAINEL[g]+" "+pre+"rows,"+GRADE_PAINEL[g]+" "+pre+"cols{min-width:calc("+(BASE_GRADE[g]+soma)+"px + "+(ex.length+GAPS_BASE[g])+" * var(--row-gap))}";
-  });
+  /* Largura da linha: vem do CSS (grade com max-content na .cl-list/.hg-list),
+     que soma as colunas visíveis sozinho. Nada de largura mínima calculada aqui. */
   var tag = document.getElementById("grade-colunas-css");
   if(!tag){ tag = document.createElement("style"); tag.id = "grade-colunas-css"; document.head.appendChild(tag); }
   if(tag.textContent !== css) tag.textContent = css;
