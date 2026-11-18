@@ -2261,7 +2261,7 @@ function linhaHtml(t){
      colunas vezes as linhas da janela em atributo morto. Quem manda é o
      colgroup. O parâmetro w segue na assinatura porque as chamadas passam c.w. */
   function td(cls, w, html, title){
-    return '<td class="'+cls+'"'+(title?' title="'+esc(title)+'"':'')+'>'+html+'</td>';
+    return '<td class="'+cls+'"'+(title?' data-tt="'+esc(title)+'"':'')+'>'+html+'</td>';
   }
   var cols = {
     key:'<a class="chave" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+icon("ext",10)+'</a>'+pontoButton(t.key),
@@ -2294,7 +2294,8 @@ function linhaHtml(t){
   }
   return '<tr'+(escorregou ? ' class="escorregou"' : '')+'>'+colunasVisiveis().map(function(c){
     var cls = (c.id==="summary"||c.id==="cliente"||c.id==="testAnalyst"||c.id==="dev"||c.id==="versoes"||c.id==="rank") ? "corta" : "";
-    /* Agora TODA coluna trunca, então toda célula ganha o valor cheio no title —
+    /* Agora TODA coluna trunca, então toda célula guarda o valor cheio em data-tt
+       (vira title só se estiver cortado, ver o mouseover no fim do arquivo) —
        antes só Resumo e Cliente truncavam e só elas precisavam. valorDaColuna()
        devolve exatamente o texto que apareceria na tela, que é o que se quer ler
        no tooltip. */
@@ -3034,7 +3035,7 @@ function renderClList(){
       + celPos
       + celSem
       + '<span class="ponto-key-cell"><a class="cl-key mono" style="'+risco+'" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
-      + '<span class="cl-summary"><span class="txt" style="'+risco+'">'+esc(t.summary)+'</span>'
+      + '<span class="cl-summary"><span class="txt" style="'+risco+'" data-tt="'+esc(t.summary)+'">'+esc(t.summary)+'</span>'
       +   (voltou?'<span class="chip-mini chip-voltou">Voltou</span>':"")
       +   (t.impedida
             ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">Impedida no Jira</span>'
@@ -3669,7 +3670,7 @@ function linhaHomolog(t){
     +   (marcada ? "Testada em homologação geral"+(quando?" em "+quando:"")+" — clique para desmarcar"
                  : "Marcar como testada em homologação geral")+'">'+icon("check",12)+'</button></span>'
     + '<span class="ponto-key-cell"><a class="cl-key" href="'+JIRA_BASE+encodeURIComponent(t.key)+'" target="_blank" rel="noreferrer">'+esc(t.key)+'</a>'+pontoButton(t.key)+'</span>'
-    + '<span class="cl-summary"><span class="txt">'+esc(t.summary)+'</span>'
+    + '<span class="cl-summary"><span class="txt" data-tt="'+esc(t.summary)+'">'+esc(t.summary)+'</span>'
     +   (t.impedida ? '<span class="chip-mini chip-impedida" title="Impedimento marcado no Jira — vale para todo o time">Impedida no Jira</span>' : "")
     +   (extra ? '<span class="chip-mini chip-extra" title="Posta na fila aqui'+(quandoExtra?" em "+quandoExtra:"")
     +     ' — o status do Jira ('+esc(t.status||"sem status")+') não a traria">na fila pelo time</span>' : "")
@@ -4777,7 +4778,7 @@ function colunasCabecalho(g, base){
 function celulasExtras(g, t){
   return extrasDaGrade(g).map(function(c){
     var v = valorDaColuna(t, c.id);
-    return '<span class="g-extra gx-'+c.id+' cel-faint'+(COL_NUMERICAS[c.id] ? " g-num" : "")+'" style="width:'+c.w+'px" title="'+esc(v)+'">'+esc(v)+'</span>';
+    return '<span class="g-extra gx-'+c.id+' cel-faint'+(COL_NUMERICAS[c.id] ? " g-num" : "")+'" style="width:'+c.w+'px" data-tt="'+esc(v)+'">'+esc(v)+'</span>';
   }).join("");
 }
 function aplicarCssColunas(){
@@ -5167,3 +5168,25 @@ if(!jiraDisponivel()){
   avisar("info","Clique em Atualizar para trazer todas as tarefas do projeto "+PROJETO+". Depois a aba Versões recorta por release, e a Checklist por analista.");
 }
 })();
+
+
+/* Tooltip só quando o texto está cortado (com "…"). Ao passar o mouse, sobe até
+   4 níveis procurando o elemento que trunca; se o conteúdo não cabe, põe o texto
+   inteiro no title (data-tt, ou o próprio texto); se cabe, tira o title que este
+   código pôs. Vale para tabela, Checklist, Homologação e cabeçalhos. */
+document.addEventListener("mouseover", function(e){
+  var n = e.target, alvo = null;
+  for(var i=0; n && n.nodeType===1 && i<5; i++, n=n.parentElement){
+    if(n.hasAttribute("data-tt") || getComputedStyle(n).textOverflow==="ellipsis"){ alvo = n; break; }
+  }
+  if(!alvo) return;
+  /* title posto por outra parte do painel (explicação de botão etc.) fica como está */
+  if(alvo.hasAttribute("title") && !alvo.hasAttribute("data-tt-pos")) return;
+  var cortado = alvo.scrollWidth > alvo.clientWidth + 1;
+  if(cortado){
+    var txt = alvo.getAttribute("data-tt") || (alvo.textContent || "").trim();
+    if(txt && alvo.getAttribute("title") !== txt){ alvo.setAttribute("title", txt); alvo.setAttribute("data-tt-pos","1"); }
+  } else if(alvo.hasAttribute("data-tt-pos")){
+    alvo.removeAttribute("title"); alvo.removeAttribute("data-tt-pos");
+  }
+}, true);
