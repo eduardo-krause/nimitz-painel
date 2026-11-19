@@ -359,9 +359,7 @@ var CHECK_VAZIO = {
      da Entrega (riscoPrazo); as marcas só existem para a tarefa movida CONTRA o
      padrão (chave -> data ISO), como hgProx/hgAtual na Homologação. Desde
      17/11/2026 valem para a equipe (HG_TIME), como as da Homologação. */
-  clSemana:{}, clDemais:{},
-  /* Checklist: esconde de uma vez o bloco Concluídas. */
-  clOcultaMP:false
+  clSemana:{}, clDemais:{}
 };
 
 /* ===================== estado ===================== */
@@ -1711,8 +1709,6 @@ function montarShell(){
   +       '<div class="pop wide hidden" id="pop-feito"><div class="pop-cab">Tarefas nestes status já entram como '
   +       'feitas e vão para o fim da lista, riscadas. Se você desmarcar na mão, sua escolha prevalece.</div>'
   +       '<div class="pop-lista" id="pop-feito-lista"></div></div></div>'
-  +     '<button class="btn" id="bt-cl-mp" title="Esconde ou mostra de uma vez o bloco Concluídas (Pronto para Merge, Teste Produção e os demais status de Já testada), sem desmarcar status por status">'
-  +       icon("eyeoff",14)+' Ocultar concluídas <span class="contador" id="ct-cl-mp"></span></button>'
   +     botaoColunas("checklist")
   +     '<div class="toolbar-dir" id="cl-toolbar-dir">'
   +       '<select id="sel-ordenacao" class="sel-inline" title="Como ordenar a lista. '
@@ -1807,7 +1803,7 @@ function montarShell(){
    "bt-teste","pop-teste","pop-teste-lista","ct-teste",
    "bt-feito","pop-feito","pop-feito-lista","ct-feito",
    "sel-ordenacao","cl-list","cl-rows","cl-cols","cl-toolbar-dir",
-   "sel-cl-versao","bt-cl-mp","ct-cl-mp","cl-lote","cl-lote-msg","bt-cl-descartar","bt-cl-aplicar"
+   "sel-cl-versao","cl-lote","cl-lote-msg","bt-cl-descartar","bt-cl-aplicar"
   ].forEach(function(id){ el[id]=document.getElementById(id); });
 }
 
@@ -2706,11 +2702,7 @@ function clDerivadosCalc(){
   });
   var statusDaPessoa = Array.from(contS.entries()).map(function(e){ return {status:e[0], qtd:e[1], fim:fimS.get(e[0])}; })
     .sort(function(a,b){ return (a.fim?1:0)-(b.fim?1:0) || a.status.localeCompare(b.status,"pt-BR"); });
-  var qtdMP = daPessoa.filter(function(t){
-    return !ocultosSet.has(t.status||SEM_STATUS) && estadoDe(t) === "feita";
-  }).length;
   var noFiltro = daPessoa.filter(function(t){
-    if(state.check.clOcultaMP && estadoDe(t) === "feita") return false;
     return !ocultosSet.has(t.status||SEM_STATUS);
   });
   var q = norm(state.clBusca);
@@ -2726,12 +2718,10 @@ function clDerivadosCalc(){
   });
   if(state.clSort.col) visiveis = agruparChecklist(aplicarClSort(visiveis));
   var resumo = {teste:0,dispensada:0,feita:0};
-  /* O progresso conta as concluídas mesmo com elas escondidas: esconder é só
-     tirar da frente, não desfazer o trabalho. */
   daPessoa.forEach(function(t){ if(!ocultosSet.has(t.status||SEM_STATUS)) resumo[estadoDe(t)]++; });
   var qtdRevividas = noFiltro.filter(function(t){ return state.check.revividas[t.key]; }).length;
   return {daPessoa:daPessoa, statusDaPessoa:statusDaPessoa, noFiltro:noFiltro, visiveis:visiveis, posicoes:posicoes,
-          resumo:resumo, qtdRevividas:qtdRevividas, qtdMP:qtdMP};
+          resumo:resumo, qtdRevividas:qtdRevividas};
 }
 
 function renderPessoaBotao(){
@@ -4289,10 +4279,6 @@ function renderClVersao(){
   if(state.clVersao && !o.valido(state.clVersao)) state.clVersao = "";
   el["sel-cl-versao"].innerHTML = o.html;
   el["sel-cl-versao"].value = state.clVersao;
-  var dmp = clDerivados();
-  el["ct-cl-mp"].textContent = dmp.qtdMP;
-  el["bt-cl-mp"].classList.toggle("btn-on", !!state.check.clOcultaMP);
-  el["bt-cl-mp"].classList.toggle("hidden", !dmp.qtdMP && !state.check.clOcultaMP);
   if(hgGravaJira() && state.aba === "checklist") carregarVersoesJira(false);
   preencherLote("cl", function(){ return clDerivados().visiveis; });
 }
@@ -4448,7 +4434,6 @@ function ligarEventos(){
     state.hgBusca = el["in-busca-hg"].value; renderHomolog();
   });
   el["sel-cl-versao"].onchange = function(){ state.clVersao = el["sel-cl-versao"].value; renderChecklistAll(); };
-  el["bt-cl-mp"].onclick = function(){ atualizarCheck({clOcultaMP: !state.check.clOcultaMP}); renderChecklistAll(); };
   el["bt-cl-descartar"].onclick = descartarRascunho;
   el["bt-cl-aplicar"].onclick = aplicarRascunho;
   el["sel-hg-versao"].onchange = function(){ state.hgVersao = el["sel-hg-versao"].value; renderHomolog(); };
