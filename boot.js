@@ -172,7 +172,7 @@ if (preview && local) {
   $('connection-status').textContent = 'Sem conexão · configure o Jira para carregar tarefas';
 }
 const script = document.createElement('script');
-script.src = './app.js?v=20261118c';
+script.src = './app.js?v=20261119a';
 script.onload = () => {
   const button = $('connection-open');
   document.querySelector('#app .topbar').appendChild(button);

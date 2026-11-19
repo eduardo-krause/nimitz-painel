@@ -2583,11 +2583,7 @@ function aplicarClSort(base){
     return cmp(a,b) || (pos.get(a.key) - pos.get(b.key));
   });
 }
-function daPessoaCalc(){
-  /* A ordenação por coluna entra DEPOIS da ordem definida e ANTES do corte das
-     concluídas: ordenar por Status não pode trazer o que já foi feito de volta
-     para o meio da fila. */
-  var ordenadas = aplicarClSort(ordenadasDaPessoa(state.pessoa));
+function agruparChecklist(ordenadas){
   var semana=[], demais=[], feitas=[];
   ordenadas.forEach(function(t){
     if(estadoDe(t)==="feita") feitas.push(t);
@@ -2700,7 +2696,7 @@ function clDerivados(){
   return valor;
 }
 function clDerivadosCalc(){
-  var daPessoa = daPessoaCalc();
+  var daPessoa = agruparChecklist(ordenadasDaPessoa(state.pessoa));
   var ocultosSet = new Set(state.check.statusOcultos);
   var contS = new Map(), fimS = new Map();
   daPessoa.forEach(function(t){
@@ -2723,12 +2719,18 @@ function clDerivadosCalc(){
     if(q && norm([t.key,t.summary,t.status,t.squad,t.cliente,hgVersaoDe(t),entVersaoDe(t)].join(" ")).indexOf(q)===-1) return false;
     return true;
   });
+  /* A posição acompanha a tarefa quando o cabeçalho muda a ordem das linhas. */
+  var posicoes = new Map();
+  visiveis.forEach(function(t){
+    if(estadoDe(t) !== "feita") posicoes.set(t.key, posicoes.size + 1);
+  });
+  if(state.clSort.col) visiveis = agruparChecklist(aplicarClSort(visiveis));
   var resumo = {teste:0,dispensada:0,feita:0};
   /* O progresso conta as concluídas mesmo com elas escondidas: esconder é só
      tirar da frente, não desfazer o trabalho. */
   daPessoa.forEach(function(t){ if(!ocultosSet.has(t.status||SEM_STATUS)) resumo[estadoDe(t)]++; });
   var qtdRevividas = noFiltro.filter(function(t){ return state.check.revividas[t.key]; }).length;
-  return {daPessoa:daPessoa, statusDaPessoa:statusDaPessoa, noFiltro:noFiltro, visiveis:visiveis,
+  return {daPessoa:daPessoa, statusDaPessoa:statusDaPessoa, noFiltro:noFiltro, visiveis:visiveis, posicoes:posicoes,
           resumo:resumo, qtdRevividas:qtdRevividas, qtdMP:qtdMP};
 }
 
@@ -2976,7 +2978,7 @@ function renderClList(){
   var ativasVis = visiveis.filter(function(t){ return estadoDe(t) !== "feita"; });
   var qtdSemana = ativasVis.filter(clNaSemana).length;
   var podeArrastar = state.clOrdenacao === "manual" && !state.clSort.col && window.nimitz.canReorder();
-  var sepSemana = false, sepDemais = false, posAtiva = 0;
+  var sepSemana = false, sepDemais = false;
   visiveis.forEach(function(t,i){
     var estado = estadoDe(t);
     var naSemana = estado !== "feita" && clNaSemana(t);
@@ -3014,9 +3016,8 @@ function renderClList(){
     /* Arrastar com a lista ordenada por coluna gravaria para o TIME uma ordem
        que ninguém pediu: o que se vê na tela não é a ordem definida, e o solto
        seria escrito como se fosse. */
-    if(estado !== "feita") posAtiva++;
     var celPos = estado === "feita" ? '<span class="cl-pos"></span>'
-      : '<span class="cl-pos"><input type="text" inputmode="numeric" data-pos="1" value="'+posAtiva+'"'
+      : '<span class="cl-pos"><input type="text" inputmode="numeric" data-pos="1" value="'+d.posicoes.get(t.key)+'"'
         + (podeArrastar ? ' title="Digite a posição e tecle Enter: 1 manda para o topo, 3 para a terceira linha. Número dentro de Esta semana põe a tarefa na semana; além dela, em Demais. A ordem vale para o time."'
                         : ' disabled title="Para mudar a posição, deixe a ordenação em “Ordem definida” e sem ordenar por coluna"')+'></span>';
     var celSem = estado === "feita" ? '<span class="cl-sem"></span>'
