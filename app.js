@@ -1621,7 +1621,7 @@ function montarShell(){
   +   '<button class="btn hidden" id="bt-parar">'+icon("x",14)+' Parar</button>'
   +   '<div class="topo-stats" id="topo-stats"></div>'
   +   '<div class="dd" id="dd-novidades"><button class="btn btn-mais" id="bt-novidades" title="Histórico de versões" aria-label="Histórico de versões">'
-  +     '<svg class="icon" viewBox="0 0 24 24" width="16" height="16"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>'
+  +     '<svg class="icon" viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>'
   +     '<span class="ponto-novo hidden" id="ponto-novo"></span></button>'
   +     '<div class="pop pop-novidades hidden" id="pop-novidades"></div></div>'
   + '</header>'
