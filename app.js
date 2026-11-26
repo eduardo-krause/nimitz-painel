@@ -63,7 +63,7 @@ var CAMPOS = ["summary","status","issuetype","priority","fixVersions","duedate",
   "customfield_10095","customfield_10215","customfield_10060","created",
   "customfield_10012","customfield_10114","customfield_10178","customfield_10824",
   "customfield_10825","customfield_10076","customfield_10594","customfield_10626",
-  "customfield_10031","timespent","workratio"];
+  "customfield_10031","customfield_12268","timespent","workratio"];
 
 /* As 7 fases da planilha, mapeadas para os status reais do Jira.
    Qualquer status novo cai em "outro" e aparece sinalizado, em vez de
@@ -155,6 +155,8 @@ var COLUNAS = [
   {id:"motivoReprov", rot:"Motivo reprovação", w:176, tipo:"texto"},
   {id:"criado", rot:"Criado", w:144, tipo:"data"},
   {id:"primeiraResp", rot:"Primeira resposta", w:144, tipo:"data"},
+  /* customfield_12268: data e hora, SLA de bug em horas úteis (campo novo no Jira). */
+  {id:"prazoBug", rot:"Prazo de entrega - Bug", w:176, tipo:"data"},
   {id:"estDesenv", rot:"Estimativa de desenvolvimento", w:208, tipo:"texto"},
   {id:"estRequisitos", rot:"Estimativa de requisitos", w:176, tipo:"texto"},
   {id:"estUX", rot:"Estimativa de UX", w:136, tipo:"texto"},
@@ -388,7 +390,7 @@ var state = {
   /* Padrão: só as 11 colunas originais visíveis. As demais existem no
      seletor de Colunas — com todas ligadas de uma vez a tabela fica
      larga demais para qualquer tela. */
-  ocultas: ["versoes","impedida","updated","resolvido","rank"].concat(["assignee","reporter","creator","analistaReq","analiseTecnica","ux","devOrigem","reqOrigem","testeOrigem","squad","modulo","rotina","impacto","clienteNimitz","origemBug","classifBug","criticidadeBug","bugGerado","classifMelhoria","gerarDpu","iaRequisitos","iaTestes","iaDesenv","motivoReprovT","motivoReprovA","resolucao","catStatus","versaoEntrega","versoesAfet","componentes","etiquetas","pai","tarefaOrigem","branch","motivoReprov","criado","primeiraResp","estDesenv","estRequisitos","estUX","estAnaliseTec","qtdReprov","qtdMotivos","qtdReprovAnt","gut","tempoGasto","razaoTrab"]),
+  ocultas: ["versoes","impedida","updated","resolvido","rank"].concat(["assignee","reporter","creator","analistaReq","analiseTecnica","ux","devOrigem","reqOrigem","testeOrigem","squad","modulo","rotina","impacto","clienteNimitz","origemBug","classifBug","criticidadeBug","bugGerado","classifMelhoria","gerarDpu","iaRequisitos","iaTestes","iaDesenv","motivoReprovT","motivoReprovA","resolucao","catStatus","versaoEntrega","versoesAfet","componentes","etiquetas","pai","tarefaOrigem","branch","motivoReprov","criado","primeiraResp","prazoBug","estDesenv","estRequisitos","estUX","estAnaliseTec","qtdReprov","qtdMotivos","qtdReprovAnt","gut","tempoGasto","razaoTrab"]),
   menuTab: null,            // popover aberto na aba de tabela
   /* Abre pela chave decrescente: o numero do NMTZ cresce com o tempo, entao
      isso poe a tarefa mais nova no topo. ordenadas() compara o sufixo
@@ -875,7 +877,7 @@ function valorDaColuna(t, id){
   if(id==="impedida") return t.impedida ? "Sim" : "Não";
   if(id==="updated") return fmtDataHora(t.updated);
   if(id==="resolvido") return fmtData(t.resolvido);
-  if(id==="criado" || id==="primeiraResp") return fmtDataHora(t[id]);
+  if(id==="criado" || id==="primeiraResp" || id==="prazoBug") return fmtDataHora(t[id]);
   return t[id]==null ? "" : String(t[id]);
 }
 /* Os valores de uma tarefa numa coluna multi. Cliente é lista no Jira
@@ -1186,6 +1188,7 @@ function mapear(node){
     motivoReprov: (f.customfield_10060==null ? "" : String(f.customfield_10060)),
     criado: f.created || "",
     primeiraResp: f.customfield_10012 || "",
+    prazoBug: f.customfield_12268 || "",
     estDesenv: (f.customfield_10114==null ? "" : String(f.customfield_10114)),
     estRequisitos: (f.customfield_10178==null ? "" : String(f.customfield_10178)),
     estUX: (f.customfield_10824==null ? "" : String(f.customfield_10824)),
