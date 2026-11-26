@@ -737,6 +737,21 @@ tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
 .pop-item.on{color:var(--text);font-weight:600;}
 .pop-empty{padding:var(--sp-5) var(--sp-3);text-align:center;font-size:var(--fs-sm);color:var(--text-faint);}
 .dd{position:relative;}
+/* histórico de versões (botão ⋯ no topo) */
+.btn-mais{position:relative;padding:0 var(--sp-2);}
+.btn-mais .icon{fill:currentColor;stroke:none;}
+.ponto-novo{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--accent-1,#e5484d);}
+.pop-novidades{left:auto;right:0;width:360px;max-width:92vw;}
+.novidades-lista{max-height:min(60vh,460px);overflow:auto;}
+.nov-item{padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border);}
+.nov-item:last-child{border-bottom:0;}
+.nov-item.atual{background:var(--surface-3);}
+.nov-topo{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--fs-xs);color:var(--text-muted);}
+.nov-topo b{color:var(--text);}
+.nov-topo span{font-family:var(--font-mono);color:var(--text-faint);}
+.nov-topo em{font-style:normal;font-weight:700;color:var(--accent-1,#e5484d);}
+.nov-item ul{margin:var(--sp-1) 0 0;padding-left:18px;font-size:var(--fs-sm);line-height:1.45;color:var(--text);}
+
 /* Popover do filtro multi: fixo na janela e posto sob o botão do cabeçalho.
    Dentro do <th> ele seria cortado pelo overflow da tabela e remontado a cada
    marcação. */
@@ -770,6 +785,6 @@ tr.escorregou > td:first-child{box-shadow:inset 3px 0 0 var(--warn-border);}
 <div class="app-shell"><div class="app-card" id="app"></div></div>
 <script id="estado-replicado" type="application/json">null</script>
 
-<script type="module" src="./boot.js?v=20261126a"></script>
+<script type="module" src="./boot.js?v=20261126b"></script>
 </body>
 </html>

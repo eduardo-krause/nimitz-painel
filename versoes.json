@@ -1,0 +1,130 @@
+[
+ {
+  "v": "20261126b",
+  "data": "26/11/2026",
+  "itens": [
+   "Botão ⋯ no topo com o histórico de versões (o que mudou em cada uma)"
+  ]
+ },
+ {
+  "v": "20261126a",
+  "data": "26/11/2026",
+  "itens": [
+   "Adiciona coluna Prazo de entrega - Bug (customfield_12268)"
+  ]
+ },
+ {
+  "v": "20261119",
+  "data": "19/11/2026",
+  "itens": [
+   "Remove botão de ocultar tarefas concluídas da checklist",
+   "Mantém a posição da tarefa ao ordenar a checklist"
+  ]
+ },
+ {
+  "v": "20261118",
+  "data": "18/11/2026",
+  "itens": [
+   "Tooltip com o texto inteiro só quando ele está cortado (tabela, Checklist, Homologação)",
+   "Grades e tabela sem vão no fim: largura vem do conteúdo, sobra vai para o Resumo (mín. 340px), colunas extras vão para a rolagem",
+   "Resumo com largura fixa: colunas extras vão para a rolagem lateral em vez de espremer o nome da tarefa"
+  ]
+ },
+ {
+  "v": "20261117",
+  "data": "17/11/2026",
+  "itens": [
+   "Checklist: Esta semana x Demais compartilhado com a equipe (marcas antigas sobem sem apagar as dos outros)",
+   "Checklist: seta da semana sem recalcular a lista de versões a cada clique",
+   "Checklist/Homologação: lista das caixas de versão calculada uma vez por redesenho (troca de posição de ~1,1 s para ~40 ms)",
+   "Checklist: o número da posição também põe a tarefa em Esta semana ou em Demais",
+   "Versão entrega: recorte por plano (Checklist, Homologação, Versões), coluna com seletor que grava no Jira e destaque de quem saiu em outra versão",
+   "Checklist: posição e arraste mudam a linha na hora; gravação da ordem em segundo plano, com fila",
+   "Checklist: botão Ocultar concluídas esconde o bloco Concluídas inteiro; progresso segue contando",
+   "Checklist: colunas Posição e Semana no tamanho do título, conteúdo centralizado",
+   "Checklist: coluna Semana fixa entre Posição e Chave",
+   "Checklist: coluna Semana ao lado da Prioridade e grade inteira com colunas extras",
+   "Checklist: versão como na Homologação, campo de posição, blocos da semana e ocultar merge/produção"
+  ]
+ },
+ {
+  "v": "20261116",
+  "data": "16/11/2026",
+  "itens": [
+   "Atualizar também busca as marcações da Homologação",
+   "Painel se atualiza sozinho quando sai versão nova",
+   "Homologação: marca feita sem servidor fica guardada e sobe sozinha",
+   "Homologação: aviso de sincronização com a equipe",
+   "Homologação: marcas e observações compartilhadas com a equipe",
+   "Ponto: editar e excluir lançamentos direto no Relatório"
+  ]
+ },
+ {
+  "v": "20261113",
+  "data": "13/11/2026",
+  "itens": [
+   "Ponto: sem permissão de excluir horas, reduz o registro a 1m no Jira (mínimo) e tira o lançamento"
+  ]
+ },
+ {
+  "v": "20261112",
+  "data": "12/11/2026",
+  "itens": [
+   "Registro: modal para trocar de tarefa com cronômetro ativo; botão de tema claro/escuro"
+  ]
+ },
+ {
+  "v": "20261111",
+  "data": "11/11/2026",
+  "itens": [
+   "Filtro de data: rótulo numa linha e colunas mais largas",
+   "Filtro de período (de/até) nas colunas de data"
+  ]
+ },
+ {
+  "v": "20261109",
+  "data": "09/11/2026",
+  "itens": [
+   "Segurança: CSP nas páginas e escape dos ids do Ponto",
+   "Homologação: sem coluna vazia no fim; Observação 160px",
+   "Troca a versão dos scripts (cache)",
+   "Largura da linha soma as colunas extras",
+   "Homologação sem o X de tirar da fila; cabeçalhos de coluna com nome completo",
+   "Ponto: sem permissão de excluir horas no Jira, zera o registro (0m) e tira o lançamento",
+   "Todas as mensagens da tela somem sozinhas depois de 5 s"
+  ]
+ },
+ {
+  "v": "20261106",
+  "data": "06/11/2026",
+  "itens": [
+   "Atualização silenciosa em segundo plano; uma mensagem só ao clicar",
+   "Registro: avisos passageiros somem sozinhos",
+   "Filtro por lista com Filtrar, arrastar colunas, cores do Tipo, versão na barra da aba e limpeza",
+   "Horas por pessoa: busca só a aba aberta, mostra a cada lote e tenta de novo; sem subtítulo",
+   "Legendas em sentence case, margens de 20px, botão Legendas no rodapé",
+   "Checklist sem Só prontas e sem mensagem fixa da ordem compartilhada",
+   "Contador de Colunas visíveis/total nas quatro abas",
+   "Menu Colunas no mesmo padrão nas quatro abas",
+   "Botão único Atualizar, dados do Jira compartilhados, sem Filtrar e Tudo",
+   "Login e token salvos no navegador até Sair e limpar dados"
+  ]
+ },
+ {
+  "v": "20261105",
+  "data": "05/11/2026",
+  "itens": [
+   "Coluna Horas Analista",
+   "Colunas por aba e por pessoa nas quatro grades; Horas Testes e Horas Dev",
+   "Aba Ponto passa a se chamar Registro",
+   "Ponto no padrao visual do painel (claro e escuro)",
+   "Ponto: segue o tema calculado do painel e evita cache antigo",
+   "Ponto: modo escuro com a paleta do painel",
+   "Ponto: remove perfis de conta compartilhada; cada pessoa usa a propria conta Atlassian",
+   "Integra Ponto das Tarefas com cronometro, relatorio e horas individuais",
+   "Adota navio Nimitz em teal como logo e favicon",
+   "Usa logo Filt no cabeçalho e favicon",
+   "Publica painel Nimitz com contas individuais e ordem compartilhada"
+  ]
+ }
+]

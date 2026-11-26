@@ -1620,6 +1620,10 @@ function montarShell(){
   +   '<button class="btn btn-primary" id="bt-carregar">'+icon("refresh",14,"ic-load")+' Atualizar</button>'
   +   '<button class="btn hidden" id="bt-parar">'+icon("x",14)+' Parar</button>'
   +   '<div class="topo-stats" id="topo-stats"></div>'
+  +   '<div class="dd" id="dd-novidades"><button class="btn btn-mais" id="bt-novidades" title="Histórico de versões" aria-label="Histórico de versões">'
+  +     '<svg class="icon" viewBox="0 0 24 24" width="16" height="16"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>'
+  +     '<span class="ponto-novo hidden" id="ponto-novo"></span></button>'
+  +     '<div class="pop pop-novidades hidden" id="pop-novidades"></div></div>'
   + '</header>'
   + '<div class="statusbar hidden" id="aviso"></div>'
 
@@ -5135,8 +5139,52 @@ function iniciarComp(){
   });
 }
 
+/* ===================== histórico de versões =====================
+   Lê ./versoes.json (mantido por scripts/publicar.mjs, uma entrada por
+   publicação). O ponto no botão acende quando há versão que esta pessoa ainda
+   não abriu; a marca fica no navegador e, se ele não deixar gravar, o ponto
+   só reaparece a cada carga — sem quebrar nada. */
+function iniciarNovidades(){
+  var bt = document.getElementById("bt-novidades"), pop = document.getElementById("pop-novidades"),
+      ponto = document.getElementById("ponto-novo");
+  if(!bt || !pop) return;
+  var CH = window.nimitz.storagePrefix+"versao-vista", lista = null;
+  function vista(){ try{ return localStorage.getItem(CH)||""; }catch(e){ return ""; } }
+  function marcar(v){ try{ localStorage.setItem(CH, v); }catch(e){} }
+  function esc(x){ return String(x).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function desenhar(){
+    if(!lista){ pop.innerHTML = '<div class="pop-cab">Não consegui carregar o histórico.</div>'; return; }
+    var ant = vista();
+    pop.innerHTML = '<div class="pop-cab"><b>O que mudou</b> — versão atual '+esc(lista[0] ? lista[0].v : "")+'</div>'
+      + '<div class="novidades-lista">' + lista.slice(0,15).map(function(e,i){
+          return '<div class="nov-item'+(i===0?" atual":"")+'"><div class="nov-topo"><b>'+esc(e.data)+'</b><span>'+esc(e.v)+'</span>'
+            + (e.v!==ant && i===0 && ant ? '<em>novo</em>' : '')+'</div><ul>'
+            + e.itens.map(function(t){ return '<li>'+esc(t)+'</li>'; }).join("")+'</ul></div>';
+        }).join("") + '</div>';
+  }
+  function carregar(cb){
+    fetch("./versoes.json?v="+Date.now(), {cache:"no-store"}).then(function(r){ return r.json(); })
+      .then(function(j){ lista = Array.isArray(j) ? j : null; cb(); }).catch(function(){ cb(); });
+  }
+  carregar(function(){
+    if(lista && lista[0] && vista() !== lista[0].v) ponto.classList.remove("hidden");
+  });
+  bt.addEventListener("click", function(ev){
+    ev.stopPropagation();
+    var abrir = pop.classList.contains("hidden");
+    pop.classList.toggle("hidden", !abrir);
+    if(!abrir) return;
+    desenhar();
+    carregar(function(){ desenhar(); if(lista && lista[0]){ marcar(lista[0].v); ponto.classList.add("hidden"); } });
+  });
+  document.addEventListener("click", function(ev){
+    if(!pop.classList.contains("hidden") && !pop.contains(ev.target)) pop.classList.add("hidden");
+  });
+}
+
 /* ===================== início ===================== */
 montarShell();
+iniciarNovidades();
 carregarLocal();
 aplicarReplicado();
 /* Depois de adotar o pacote replicado, e nao antes: e aqui que as tarefas
